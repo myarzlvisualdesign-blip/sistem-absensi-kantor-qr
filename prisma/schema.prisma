@@ -1,0 +1,80 @@
+# This is your Prisma schema file,
+# learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  password     String
+  name         String
+  role         String       @default("USER")
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  employee     Employee?
+  editedAttendances Attendance[] @relation("EditedBy")
+}
+
+model Employee {
+  id           String       @id @default(cuid())
+  userId       String       @unique
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId   String       @unique
+  name         String
+  email        String       @unique
+  phone        String?
+  department   String?
+  position     String?
+  qrToken      String       @unique
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  attendances  Attendance[]
+}
+
+model Attendance {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId       String
+  employee         Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date             String
+  checkInTime      DateTime  @default(now())
+  status           String
+  scannedQrToken   String?
+  note             String?
+  editedByAdminId  String?
+  editedBy         User?     @relation("EditedBy", fields: [editedByAdminId], references: [id])
+  editedAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model OfficeSetting {
+  id             String   @id @default(cuid())
+  workStartTime  String   @default("08:00")
+  lateLimitTime  String   @default("08:15")
+  companyName    String   @default("PT. Contoh Indonesia")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  adminUserId  String
+  admin        User     @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  action       String
+  entityType   String
+  entityId     String?
+  oldValue     String?
+  newValue     String?
+  createdAt    DateTime @default(now())
+}

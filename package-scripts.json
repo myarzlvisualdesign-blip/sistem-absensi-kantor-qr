@@ -1,0 +1,21 @@
+{
+  "name": "sistem-absensi-kantor-qr",
+  "version": "1.0.0",
+  "description": "QR Code based office attendance system",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma db push --force-reset",
+    "db:migrate": "prisma migrate deploy",
+    "cf:login": "wrangler login",
+    "cf:deploy": "npm run build && wrangler pages deploy out",
+    "cf:preview": "npm run build && wrangler pages dev out"
+  }
+}
