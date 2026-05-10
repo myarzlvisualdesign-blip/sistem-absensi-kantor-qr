@@ -1,18 +1,19 @@
 import { NextResponse } from 'next/server';
-import { clearSessionCookie } from '@/lib/auth';
 
 export async function POST() {
   try {
-    await clearSessionCookie();
-    return NextResponse.json({
-      success: true,
-      message: 'Logout berhasil',
+    const response = NextResponse.json({ success: true, message: 'Logout berhasil' });
+    response.cookies.delete('auth-token');
+    response.cookies.set('auth-token', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 0,
+      path: '/',
     });
+    return response;
   } catch (error) {
     console.error('Logout error:', error);
-    return NextResponse.json(
-      { error: 'Terjadi kesalahan saat logout' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Terjadi kesalahan saat logout' }, { status: 500 });
   }
 }

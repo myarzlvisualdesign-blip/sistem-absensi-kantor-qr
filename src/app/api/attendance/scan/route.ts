@@ -10,7 +10,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { employeeId, scannedToken } = await request.json();
+    const { employeeId, scannedToken } = await request.json() as { employeeId: string; scannedToken: string };
 
     if (!employeeId || !scannedToken) {
       return NextResponse.json(

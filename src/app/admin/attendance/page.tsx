@@ -50,7 +50,7 @@ export default function AttendancePage() {
 
       const res = await fetch(`/api/attendance?${params}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { attendances: Attendance[]; totalPages: number };
         setAttendances(data.attendances);
         setTotalPages(data.totalPages);
       }

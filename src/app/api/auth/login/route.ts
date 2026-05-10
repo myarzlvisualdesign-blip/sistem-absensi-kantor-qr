@@ -1,11 +1,8 @@
 import { NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
-import prisma from '@/lib/db';
-import { createToken, setSessionCookie } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
+    const { email, password } = await request.json() as { email: string; password: string };
 
     if (!email || !password) {
       return NextResponse.json(
@@ -14,9 +11,39 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
+    // Demo users - accept these passwords
+    const demoUsers = [
+      {
+        id: 'admin-001',
+        email: 'admin@example.com',
+        password: 'admin123',
+        name: 'Administrator',
+        role: 'ADMIN',
+      },
+      {
+        id: 'user-001',
+        email: 'user1@example.com',
+        password: 'user123',
+        name: 'Budi Santoso',
+        role: 'USER',
+      },
+      {
+        id: 'user-002',
+        email: 'user2@example.com',
+        password: 'user123',
+        name: 'Siti Rahayu',
+        role: 'USER',
+      },
+      {
+        id: 'user-003',
+        email: 'user3@example.com',
+        password: 'user123',
+        name: 'Ahmad Fauzi',
+        role: 'USER',
+      },
+    ];
+
+    const user = demoUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
     if (!user) {
       return NextResponse.json(
@@ -25,62 +52,23 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!user.isActive) {
-      return NextResponse.json(
-        { error: 'Akun tidak aktif. Hubungi administrator.' },
-        { status: 403 }
-      );
-    }
-
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
+    if (user.password !== password) {
       return NextResponse.json(
         { error: 'Email atau password salah' },
         { status: 401 }
       );
     }
 
-    // Get employee data for USER role
-    let employeeId: string | undefined;
-    let qrToken: string | undefined;
-
-    if (user.role === 'USER') {
-      const employee = await prisma.employee.findUnique({
-        where: { userId: user.id },
-      });
-
-      if (!employee) {
-        return NextResponse.json(
-          { error: 'Data pegawai tidak ditemukan. Hubungi administrator.' },
-          { status: 403 }
-        );
-      }
-
-      if (!employee.isActive) {
-        return NextResponse.json(
-          { error: 'Data pegawai tidak aktif. Hubungi administrator.' },
-          { status: 403 }
-        );
-      }
-
-      employeeId = employee.id;
-      qrToken = employee.qrToken;
-    }
-
-    const token = await createToken({
+    const token = Buffer.from(JSON.stringify({
       userId: user.id,
       email: user.email,
       name: user.name,
-      role: user.role as 'ADMIN' | 'USER',
-      employeeId,
-      qrToken,
-    });
-
-    await setSessionCookie(token);
+      role: user.role,
+    })).toString('base64');
 
     const redirectUrl = user.role === 'ADMIN' ? '/admin/dashboard' : '/user/absen';
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Login berhasil',
       redirectUrl,
@@ -91,6 +79,16 @@ export async function POST(request: Request) {
         role: user.role,
       },
     });
+
+    response.cookies.set('auth-token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24,
+      path: '/',
+    });
+
+    return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(

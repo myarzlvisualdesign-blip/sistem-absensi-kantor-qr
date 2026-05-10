@@ -146,7 +146,7 @@ export default async function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {recentAttendances.map((attendance) => (
+                {recentAttendances.map((attendance: { id: string; employee: { name: string; employeeId: string }; checkInTime: Date; status: string }) => (
                   <tr key={attendance.id} className="border-b last:border-0">
                     <td className="py-3">{attendance.employee.name}</td>
                     <td className="py-3 text-gray-500">{attendance.employee.employeeId}</td>

@@ -27,7 +27,7 @@ export default function QRCodesPage() {
     try {
       const res = await fetch('/api/employees');
       if (res.ok) {
-        const data = await res.json();
+        const data: Employee[] = await res.json();
         setEmployees(data);
         // Generate QR codes
         for (const emp of data) {

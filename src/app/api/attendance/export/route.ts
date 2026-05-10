@@ -55,7 +55,7 @@ export async function GET(request: Request) {
       'Catatan',
     ];
 
-    const rows = attendances.map((a) => [
+    const rows = attendances.map((a: { date: string; checkInTime: Date; status: string; note?: string | null; employee: { name: string; employeeId: string; email: string; department?: string | null; position?: string | null } }) => [
       a.date,
       new Date(a.checkInTime).toISOString(),
       a.employee.name,
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
 
     const csv = [
       headers.join(','),
-      ...rows.map((row) =>
+      ...rows.map((row: (string | Date | undefined)[]) =>
         row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')
       ),
     ].join('\n');

@@ -28,7 +28,7 @@ export default function CreateEmployeePage() {
         body: JSON.stringify(formData),
       });
 
-      const data = await res.json();
+      const data: { error?: string } = await res.json();
 
       if (!res.ok) {
         toast.error(data.error || 'Gagal membuat pegawai');

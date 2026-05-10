@@ -32,7 +32,7 @@ export default function EmployeesPage() {
     try {
       const res = await fetch('/api/employees');
       if (res.ok) {
-        const data = await res.json();
+        const data: Employee[] = await res.json();
         setEmployees(data);
       }
     } catch (error) {
@@ -54,7 +54,7 @@ export default function EmployeesPage() {
         toast.success('Pegawai berhasil dihapus');
         fetchEmployees();
       } else {
-        const data = await res.json();
+        const data: { error?: string } = await res.json();
         toast.error(data.error || 'Gagal menghapus pegawai');
       }
     } catch (error) {

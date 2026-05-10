@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
+import { Prisma } from '@prisma/client';
 import { getSession } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 import { generateQRToken, generateEmployeeId as genEmpId } from '@/lib/utils';
@@ -82,8 +83,8 @@ export async function POST(request: Request) {
         const qrToken = generateQRToken();
 
         // Create user and employee
-        await prisma.$transaction(async (tx) => {
-          await tx.user.create({
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          const newUser = await tx.user.create({
             data: {
               email: email.toLowerCase(),
               password: hashedPassword,
@@ -95,6 +96,7 @@ export async function POST(request: Request) {
 
           await tx.employee.create({
             data: {
+              userId: newUser.id,
               employeeId,
               name,
               email: email.toLowerCase(),

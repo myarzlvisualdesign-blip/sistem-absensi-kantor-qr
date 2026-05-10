@@ -35,7 +35,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = await request.json() as { workStartTime?: string; lateLimitTime?: string; companyName?: string };
     const { workStartTime, lateLimitTime, companyName } = body;
 
     let settings = await prisma.officeSetting.findFirst();

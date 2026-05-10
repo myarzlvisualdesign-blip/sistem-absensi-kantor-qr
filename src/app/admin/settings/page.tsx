@@ -28,7 +28,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/settings');
       if (res.ok) {
-        const data = await res.json();
+        const data: Settings = await res.json();
         setSettings(data);
         setFormData({
           workStartTime: data.workStartTime,
@@ -54,7 +54,7 @@ export default function SettingsPage() {
         body: JSON.stringify(formData),
       });
 
-      const data = await res.json();
+      const data: { error?: string } = await res.json();
 
       if (!res.ok) {
         toast.error(data.error || 'Gagal menyimpan');

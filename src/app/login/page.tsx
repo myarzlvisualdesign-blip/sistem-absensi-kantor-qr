@@ -22,7 +22,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await res.json();
+      const data: { error?: string; redirectUrl?: string } = await res.json();
 
       if (!res.ok) {
         toast.error(data.error || 'Login gagal');
@@ -31,7 +31,7 @@ export default function LoginPage() {
       }
 
       toast.success('Login berhasil!');
-      router.push(data.redirectUrl);
+      router.push(data.redirectUrl || '/');
       router.refresh();
     } catch (error) {
       toast.error('Terjadi kesalahan');

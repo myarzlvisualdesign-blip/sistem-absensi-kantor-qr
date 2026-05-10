@@ -35,7 +35,7 @@ export default function UserAbsenPage() {
         router.push('/login');
         return;
       }
-      const data = await res.json();
+      const data: { user: User } = await res.json();
       if (data.user.role !== 'USER') {
         router.push('/admin/dashboard');
         return;
@@ -51,7 +51,7 @@ export default function UserAbsenPage() {
     try {
       const res = await fetch(`/api/attendance/today?employeeId=${user.employeeId}`);
       if (res.ok) {
-        const data = await res.json();
+        const data: AttendanceStatus = await res.json();
         setAttendanceStatus(data);
       }
     } catch (error) {
@@ -114,7 +114,7 @@ export default function UserAbsenPage() {
         }),
       });
 
-      const data = await res.json();
+      const data: { error?: string; status?: string } = await res.json();
 
       if (!res.ok) {
         toast.error(data.error || 'Absen gagal');

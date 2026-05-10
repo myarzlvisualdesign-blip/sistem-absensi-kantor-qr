@@ -69,7 +69,7 @@ export default function ImportEmployeesPage() {
         body: formData,
       });
 
-      const data = await res.json();
+      const data: { error?: string; success?: number; failed?: number } = await res.json();
 
       if (!res.ok) {
         toast.error(data.error || 'Import gagal');
@@ -77,10 +77,15 @@ export default function ImportEmployeesPage() {
         return;
       }
 
-      setResult(data);
+      const result: ImportResult = {
+        success: data.success ?? 0,
+        failed: data.failed ?? 0,
+        errors: [],
+      };
+      setResult(result);
       toast.success(`Import berhasil! ${data.success} data diimport.`);
 
-      if (data.failed > 0) {
+      if (data.failed && data.failed > 0) {
         toast.error(`${data.failed} data gagal diimport.`);
       }
     } catch (error) {

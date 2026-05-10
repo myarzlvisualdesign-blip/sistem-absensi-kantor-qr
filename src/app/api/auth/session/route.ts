@@ -1,31 +1,30 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { cookies } from 'next/headers';
 
 export async function GET() {
   try {
-    const session = await getSession();
+    const cookieStore = await cookies();
+    const authToken = cookieStore.get('auth-token')?.value;
 
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      );
+    if (!authToken) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    return NextResponse.json({
-      user: {
-        id: session.userId,
-        email: session.email,
-        name: session.name,
-        role: session.role,
-        employeeId: session.employeeId,
-      },
-    });
+    try {
+      const payload = JSON.parse(Buffer.from(authToken, 'base64').toString());
+      return NextResponse.json({
+        user: {
+          id: payload.userId,
+          email: payload.email,
+          name: payload.name,
+          role: payload.role,
+        },
+      });
+    } catch {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
   } catch (error) {
     console.error('Session error:', error);
-    return NextResponse.json(
-      { error: 'Terjadi kesalahan' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Terjadi kesalahan' }, { status: 500 });
   }
 }

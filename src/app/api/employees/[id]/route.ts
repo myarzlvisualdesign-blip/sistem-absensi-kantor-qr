@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
+import { Prisma } from '@prisma/client';
 import { getSession } from '@/lib/auth';
 
 export async function GET(
@@ -48,7 +49,7 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const body = await request.json();
+    const body = await request.json() as { name?: string; phone?: string; department?: string; position?: string; isActive?: boolean; regenerateQr?: boolean };
     const { name, phone, department, position, isActive, regenerateQr } = body;
 
     const existingEmployee = await prisma.employee.findUnique({
@@ -68,7 +69,7 @@ export async function PUT(
       qrToken = crypto.randomBytes(16).toString('hex');
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const employee = await tx.employee.update({
         where: { id },
         data: {

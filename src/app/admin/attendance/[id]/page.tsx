@@ -43,7 +43,7 @@ export default function EditAttendancePage({ params }: { params: Promise<{ id: s
           router.push('/admin/attendance');
           return;
         }
-        const data = await res.json();
+        const data: Attendance = await res.json();
         setAttendance(data);
         setFormData({
           date: data.date,
@@ -72,7 +72,7 @@ export default function EditAttendancePage({ params }: { params: Promise<{ id: s
         body: JSON.stringify(formData),
       });
 
-      const data = await res.json();
+      const data = await res.json() as { error?: string };
 
       if (!res.ok) {
         toast.error(data.error || 'Gagal menyimpan');

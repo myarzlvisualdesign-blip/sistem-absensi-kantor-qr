@@ -46,7 +46,7 @@ export default function EditEmployeePage({ params }: { params: Promise<{ id: str
           router.push('/admin/employees');
           return;
         }
-        const data = await res.json();
+        const data: Employee = await res.json();
         setEmployee(data);
         setFormData({
           name: data.name,
@@ -96,7 +96,7 @@ export default function EditEmployeePage({ params }: { params: Promise<{ id: str
         body: JSON.stringify(formData),
       });
 
-      const data = await res.json();
+      const data: { error?: string; employee?: Partial<Employee> } = await res.json();
 
       if (!res.ok) {
         toast.error(data.error || 'Gagal menyimpan');
@@ -106,7 +106,7 @@ export default function EditEmployeePage({ params }: { params: Promise<{ id: str
 
       toast.success('Data berhasil disimpan');
       if (formData.regenerateQr) {
-        setEmployee({ ...employee!, qrToken: data.employee.qrToken, ...formData });
+        setEmployee({ ...employee!, qrToken: data.employee?.qrToken || '', ...formData });
       }
       setIsSaving(false);
     } catch (error) {

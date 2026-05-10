@@ -43,7 +43,7 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const body = await request.json();
+    const body = await request.json() as { date?: string; checkInTime?: string; status?: string; note?: string };
     const { date, checkInTime, status, note } = body;
 
     const existingAttendance = await prisma.attendance.findUnique({
