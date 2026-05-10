@@ -82,9 +82,9 @@ export async function POST(request: Request) {
 
     response.cookies.set('auth-token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: true, // Cloudflare Pages always uses HTTPS
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24,
+      maxAge: 60 * 60 * 24 * 7, // 7 days for longer session
       path: '/',
     });
 

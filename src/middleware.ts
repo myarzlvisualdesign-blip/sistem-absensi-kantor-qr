@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // List of public routes that don't require authentication
-const publicRoutes = ['/login', '/api/auth/login'];
+const publicRoutes = ['/login', '/api/auth/login', '/api/auth/logout'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -26,14 +26,12 @@ export function middleware(request: NextRequest) {
 
   if (!authToken) {
     // Redirect to login
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   // Verify token format (base64 encoded JSON)
   try {
-    const payload = JSON.parse(Buffer.from(authToken.value, 'base64').toString());
+    const payload = JSON.parse(atob(authToken.value));
 
     // Check if token has required fields
     if (!payload.userId || !payload.role) {
@@ -53,23 +51,21 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   } catch {
     // Invalid token, redirect to login
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    const response = NextResponse.redirect(loginUrl);
-    response.cookies.delete('auth-token');
+    const response = NextResponse.redirect(new URL('/login', request.url));
+    // Clear the invalid cookie
+    response.cookies.set('auth-token', '', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 0,
+      path: '/',
+    });
     return response;
   }
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files
-     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\..*|_payload).*)',
   ],
 };

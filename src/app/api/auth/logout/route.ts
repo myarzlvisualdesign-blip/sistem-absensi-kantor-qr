@@ -3,10 +3,9 @@ import { NextResponse } from 'next/server';
 export async function POST() {
   try {
     const response = NextResponse.json({ success: true, message: 'Logout berhasil' });
-    response.cookies.delete('auth-token');
     response.cookies.set('auth-token', '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: true,
       sameSite: 'lax',
       maxAge: 0,
       path: '/',
