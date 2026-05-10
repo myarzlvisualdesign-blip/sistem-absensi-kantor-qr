@@ -43,7 +43,7 @@ export default function EmployeesPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus pegawai ini?')) return;
+    if (!confirm('Nonaktifkan pegawai ini? Akun login pegawai juga akan dinonaktifkan.')) return;
 
     try {
       const res = await fetch(`/api/employees/${id}`, {
@@ -51,11 +51,11 @@ export default function EmployeesPage() {
       });
 
       if (res.ok) {
-        toast.success('Pegawai berhasil dihapus');
+        toast.success('Pegawai berhasil dinonaktifkan');
         fetchEmployees();
       } else {
         const data: { error?: string } = await res.json();
-        toast.error(data.error || 'Gagal menghapus pegawai');
+        toast.error(data.error || 'Gagal menonaktifkan pegawai');
       }
     } catch (error) {
       toast.error('Terjadi kesalahan');
@@ -85,7 +85,7 @@ export default function EmployeesPage() {
         </div>
         <div className="flex gap-3">
           <Link href="/admin/employees/import" className="btn-secondary">
-            Import CSV
+            Import CSV/XLSX
           </Link>
           <Link href="/admin/employees/create" className="btn-primary">
             + Tambah Pegawai
@@ -183,7 +183,7 @@ export default function EmployeesPage() {
                         onClick={() => handleDelete(employee.id)}
                         className="text-red-600 hover:text-red-900"
                       >
-                        Hapus
+                        Nonaktifkan
                       </button>
                     </td>
                   </tr>

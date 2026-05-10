@@ -69,7 +69,7 @@ export default function ImportEmployeesPage() {
         body: formData,
       });
 
-      const data: { error?: string; success?: number; failed?: number } = await res.json();
+      const data: { error?: string; success?: number; failed?: number; errors?: Array<{ row: number; error: string }> } = await res.json();
 
       if (!res.ok) {
         toast.error(data.error || 'Import gagal');
@@ -80,7 +80,7 @@ export default function ImportEmployeesPage() {
       const result: ImportResult = {
         success: data.success ?? 0,
         failed: data.failed ?? 0,
-        errors: [],
+        errors: data.errors ?? [],
       };
       setResult(result);
       toast.success(`Import berhasil! ${data.success} data diimport.`);
@@ -118,7 +118,7 @@ export default function ImportEmployeesPage() {
           <p>EMP-2024-0002, Siti Rahayu, siti@contoh.com, , HRD, Manager, 081234567891</p>
         </div>
         <p className="text-sm text-gray-500 mt-4">
-          * password opsional, jika kosong akan digenerate random
+          * password opsional, jika kosong sistem memakai password default user123
         </p>
       </div>
 

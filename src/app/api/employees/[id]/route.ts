@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { Prisma } from '@prisma/client';
 import { getSession } from '@/lib/auth';
+import { emptyToNull, generateQRToken } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
+
+function toJsonValue<T>(value: T) {
+  return JSON.parse(JSON.stringify(value));
+}
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await getSession();
@@ -14,7 +20,6 @@ export async function GET(
     }
 
     const { id } = await params;
-
     const employee = await prisma.employee.findUnique({
       where: { id },
       include: {
@@ -40,7 +45,7 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await getSession();
@@ -49,8 +54,14 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const body = await request.json() as { name?: string; phone?: string; department?: string; position?: string; isActive?: boolean; regenerateQr?: boolean };
-    const { name, phone, department, position, isActive, regenerateQr } = body;
+    const body = (await request.json()) as {
+      name?: string;
+      phone?: string;
+      department?: string;
+      position?: string;
+      isActive?: boolean;
+      regenerateQr?: boolean;
+    };
 
     const existingEmployee = await prisma.employee.findUnique({
       where: { id },
@@ -61,53 +72,47 @@ export async function PUT(
       return NextResponse.json({ error: 'Pegawai tidak ditemukan' }, { status: 404 });
     }
 
-    const oldValue = JSON.stringify(existingEmployee);
+    const oldValue = toJsonValue(existingEmployee);
+    const name = body.name?.trim() || existingEmployee.name;
+    const qrToken = body.regenerateQr ? generateQRToken() : existingEmployee.qrToken;
+    const isActive = body.isActive ?? existingEmployee.isActive;
 
-    let qrToken = existingEmployee.qrToken;
-    if (regenerateQr) {
-      const crypto = await import('crypto');
-      qrToken = crypto.randomBytes(16).toString('hex');
-    }
-
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const employee = await tx.employee.update({
+    const employee = await prisma.$transaction(async (tx) => {
+      const updatedEmployee = await tx.employee.update({
         where: { id },
         data: {
-          name: name || existingEmployee.name,
-          phone: phone !== undefined ? phone : existingEmployee.phone,
-          department: department !== undefined ? department : existingEmployee.department,
-          position: position !== undefined ? position : existingEmployee.position,
+          name,
+          phone: body.phone !== undefined ? emptyToNull(body.phone) : existingEmployee.phone,
+          department: body.department !== undefined ? emptyToNull(body.department) : existingEmployee.department,
+          position: body.position !== undefined ? emptyToNull(body.position) : existingEmployee.position,
           qrToken,
-          isActive: isActive !== undefined ? isActive : existingEmployee.isActive,
+          isActive,
         },
       });
 
-      if (isActive !== undefined) {
-        await tx.user.update({
-          where: { id: existingEmployee.userId },
-          data: { isActive },
-        });
-      }
+      await tx.user.update({
+        where: { id: existingEmployee.userId },
+        data: {
+          name,
+          isActive,
+        },
+      });
 
-      return employee;
+      return updatedEmployee;
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         adminUserId: session.userId,
-        action: 'UPDATE',
+        action: body.regenerateQr ? 'REGENERATE_QR' : 'UPDATE',
         entityType: 'EMPLOYEE',
         entityId: id,
         oldValue,
-        newValue: JSON.stringify(result),
+        newValue: toJsonValue(employee),
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      employee: result,
-    });
+    return NextResponse.json({ success: true, employee });
   } catch (error) {
     console.error('Update employee error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
@@ -116,7 +121,7 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await getSession();
@@ -125,34 +130,41 @@ export async function DELETE(
     }
 
     const { id } = await params;
-
     const existingEmployee = await prisma.employee.findUnique({
       where: { id },
+      include: { user: true },
     });
 
     if (!existingEmployee) {
       return NextResponse.json({ error: 'Pegawai tidak ditemukan' }, { status: 404 });
     }
 
-    // Delete employee and user (cascade)
-    await prisma.employee.delete({
-      where: { id },
+    const employee = await prisma.$transaction(async (tx) => {
+      const updatedEmployee = await tx.employee.update({
+        where: { id },
+        data: { isActive: false },
+      });
+      await tx.user.update({
+        where: { id: existingEmployee.userId },
+        data: { isActive: false },
+      });
+      return updatedEmployee;
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         adminUserId: session.userId,
-        action: 'DELETE',
+        action: 'DEACTIVATE',
         entityType: 'EMPLOYEE',
         entityId: id,
-        oldValue: JSON.stringify(existingEmployee),
+        oldValue: toJsonValue(existingEmployee),
+        newValue: toJsonValue(employee),
       },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Delete employee error:', error);
+    console.error('Deactivate employee error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

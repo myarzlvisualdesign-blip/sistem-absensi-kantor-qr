@@ -2,7 +2,7 @@ import QRCode from 'qrcode';
 import crypto from 'crypto';
 
 export function generateQRToken(): string {
-  return crypto.randomBytes(16).toString('hex');
+  return crypto.randomUUID();
 }
 
 export async function generateQRCode(token: string): Promise<string> {
@@ -43,7 +43,6 @@ export function validateQRToken(token: string): boolean {
   if (!token || typeof token !== 'string') {
     return false;
   }
-  // Token should be 32 hex characters
-  const hexRegex = /^[a-f0-9]{32}$/i;
-  return hexRegex.test(token);
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(token);
 }

@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
+function toJsonValue<T>(value: T) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 export async function GET() {
   try {
     const session = await getSession();
@@ -39,7 +45,7 @@ export async function PUT(request: Request) {
     const { workStartTime, lateLimitTime, companyName } = body;
 
     let settings = await prisma.officeSetting.findFirst();
-    const oldValue = JSON.stringify(settings);
+    const oldValue = toJsonValue(settings);
 
     if (!settings) {
       settings = await prisma.officeSetting.create({
@@ -67,7 +73,7 @@ export async function PUT(request: Request) {
         action: 'UPDATE',
         entityType: 'SETTINGS',
         oldValue,
-        newValue: JSON.stringify(settings),
+        newValue: toJsonValue(settings),
       },
     });
 

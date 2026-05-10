@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 
@@ -21,8 +21,9 @@ interface Attendance {
   };
 }
 
-export default function EditAttendancePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function EditAttendancePage() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
   const [attendance, setAttendance] = useState<Attendance | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);

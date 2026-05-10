@@ -1,99 +1,79 @@
+import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
+import { createToken } from '@/lib/auth';
+import prisma from '@/lib/db';
+import { normalizeEmail } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json() as { email: string; password: string };
+    const { email, password } = (await request.json()) as { email?: string; password?: string };
 
     if (!email || !password) {
-      return NextResponse.json(
-        { error: 'Email dan password diperlukan' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Email dan password diperlukan' }, { status: 400 });
     }
 
-    // Demo users - accept these passwords
-    const demoUsers = [
-      {
-        id: 'admin-001',
-        email: 'admin@example.com',
-        password: 'admin123',
-        name: 'Administrator',
-        role: 'ADMIN',
+    const user = await prisma.user.findUnique({
+      where: { email: normalizeEmail(email) },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            employeeId: true,
+            isActive: true,
+          },
+        },
       },
-      {
-        id: 'user-001',
-        email: 'user1@example.com',
-        password: 'user123',
-        name: 'Budi Santoso',
-        role: 'USER',
-      },
-      {
-        id: 'user-002',
-        email: 'user2@example.com',
-        password: 'user123',
-        name: 'Siti Rahayu',
-        role: 'USER',
-      },
-      {
-        id: 'user-003',
-        email: 'user3@example.com',
-        password: 'user123',
-        name: 'Ahmad Fauzi',
-        role: 'USER',
-      },
-    ];
+    });
 
-    const user = demoUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Email atau password salah' },
-        { status: 401 }
-      );
+    if (!user || !user.isActive) {
+      return NextResponse.json({ error: 'Email atau password salah' }, { status: 401 });
     }
 
-    if (user.password !== password) {
-      return NextResponse.json(
-        { error: 'Email atau password salah' },
-        { status: 401 }
-      );
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
+      return NextResponse.json({ error: 'Email atau password salah' }, { status: 401 });
     }
 
-    const token = Buffer.from(JSON.stringify({
+    if (user.role === 'USER' && (!user.employee || !user.employee.isActive)) {
+      return NextResponse.json({ error: 'Data pegawai belum aktif atau belum terdaftar' }, { status: 403 });
+    }
+
+    const token = await createToken({
       userId: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
-    })).toString('base64');
+      employeeId: user.employee?.id,
+      employeeCode: user.employee?.employeeId,
+    });
 
     const redirectUrl = user.role === 'ADMIN' ? '/admin/dashboard' : '/user/absen';
-
     const response = NextResponse.json({
       success: true,
-      message: 'Login berhasil',
       redirectUrl,
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         role: user.role,
+        employeeId: user.employee?.id,
+        employeeCode: user.employee?.employeeId,
       },
     });
 
     response.cookies.set('auth-token', token, {
       httpOnly: true,
-      secure: true, // Cloudflare Pages always uses HTTPS
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days for longer session
+      maxAge: 60 * 60 * 24,
       path: '/',
     });
 
     return response;
   } catch (error) {
     console.error('Login error:', error);
-    return NextResponse.json(
-      { error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }

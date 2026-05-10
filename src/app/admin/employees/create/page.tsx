@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 
 export default function CreateEmployeePage() {
   const [formData, setFormData] = useState({
+    employeeId: '',
     name: '',
     email: '',
     phone: '',
@@ -55,6 +56,19 @@ export default function CreateEmployeePage() {
 
       <div className="bg-white rounded-xl shadow-md p-6 max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Employee ID / NIP
+            </label>
+            <input
+              type="text"
+              value={formData.employeeId}
+              onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+              className="input-field"
+              placeholder="Kosongkan untuk generate otomatis"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nama Lengkap *

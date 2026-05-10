@@ -1,248 +1,200 @@
 # Sistem Absensi Kantor QR
 
-Aplikasi web absensi kantor berbasis QR Code dengan Next.js, TypeScript, dan Tailwind CSS.
+Aplikasi absensi kantor berbasis web dengan login pegawai, scan QR/barcode, dashboard admin, import/export spreadsheet, dan role-based access control.
 
-## Fitur
+## Fitur Utama
 
-### Untuk Pegawai (User)
-- Login/Logout
-- Absen dengan scan QR Code
-- Lihat status absen hari ini
-- Simple dan mobile-friendly
-
-### Untuk Administrator
-- Dashboard dengan statistik
-- Kelola data pegawai (CRUD)
-- Import data pegawai dari CSV/XLSX
-- Generate dan download QR Code
-- Kelola data absensi
-- Edit dan hapus data absensi
-- Export laporan ke CSV
-- Atur jam masuk dan batas telat
-- Audit log untuk semua perubahan
+- Login/logout dengan custom JWT cookie.
+- Role `ADMIN` dan `USER`.
+- Pegawai hanya dapat absen untuk data employee miliknya sendiri.
+- Validasi QR token unik, aktif, dan cocok dengan pegawai yang login.
+- Satu kali absen masuk per pegawai per tanggal.
+- Status absensi otomatis: `HADIR` atau `TERLAMBAT`.
+- Pengaturan jam masuk dan batas telat, default `08:00` dan `08:15`.
+- CRUD pegawai, nonaktif pegawai, regenerate QR.
+- Import pegawai dari CSV/XLSX.
+- Export absensi ke CSV/XLSX.
+- Audit log untuk update/delete/import data penting.
+- UI responsive untuk admin dan mobile-first untuk pegawai.
 
 ## Tech Stack
 
-- **Framework**: Next.js 14 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Database**: SQLite (via Prisma) - bisa换成 D1 untuk Cloudflare
-- **Authentication**: Custom JWT
-- **QR Generation**: qrcode
-- **Excel/CSV**: xlsx
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- PostgreSQL
+- Prisma ORM
+- Custom JWT auth
+- QR generator: `qrcode`
+- QR/barcode scanner kamera: `@zxing/browser`
+- Spreadsheet import/export: `xlsx`
+- Cloudflare runtime: `@opennextjs/cloudflare`
 
-## Prerequisites
-
-- Node.js 18+
-- npm atau pnpm
-
-## Installation
-
-### 1. Clone Repository
-
-```bash
-git clone <repo-url>
-cd sistem-absensi-kantor-qr
-```
-
-### 2. Install Dependencies
+## Setup Lokal
 
 ```bash
 npm install
-# atau
-pnpm install
-```
-
-### 3. Setup Environment
-
-Copy file `.env.example` ke `.env`:
-
-```bash
 cp .env.example .env
 ```
 
-Edit file `.env` sesuai kebutuhan:
+Isi `.env`:
 
 ```env
-DATABASE_URL="file:./dev.db"
-JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
-NEXTAUTH_SECRET="your-nextauth-secret-change-this-in-production"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public"
+NEXTAUTH_SECRET="minimum-32-karakter"
 NEXTAUTH_URL="http://localhost:3000"
+JWT_SECRET="minimum-32-karakter"
+ADMIN_EMAIL="admin@example.com"
+ADMIN_PASSWORD="admin123"
+APP_TIMEZONE="Asia/Jakarta"
 ```
 
-### 4. Setup Database
-
-Generate Prisma client dan push schema ke database:
+Generate Prisma client, jalankan migration, lalu seed:
 
 ```bash
 npm run db:generate
-npm run db:push
-```
-
-### 5. Seed Data (Optional)
-
-Jalankan seed untuk membuat data awal:
-
-```bash
+npm run db:migrate
 npm run db:seed
 ```
 
-Akan dibuat:
-- 1 admin: `admin@example.com` / `admin123`
-- 3 pegawai: `user1@example.com`, `user2@example.com`, `user3@example.com` / `user123`
-- Pengaturan kantor default
-
-### 6. Run Development Server
+Jalankan development server:
 
 ```bash
 npm run dev
 ```
 
-Buka http://localhost:3000
+Buka `http://localhost:3000`.
 
-## Deployment ke Cloudflare
+## Akun Seed
 
-### Menggunakan D1 (SQLite)
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@example.com` | `admin123` |
+| User | `user1@example.com` | `user123` |
+| User | `user2@example.com` | `user123` |
+| User | `user3@example.com` | `user123` |
 
-Cloudflare D1 adalah database SQLite yang berjalan di edge.
+## Format Import Pegawai
 
-#### 1. Setup Wrangler
+CSV/XLSX harus memiliki header:
 
-Login ke Cloudflare:
+```csv
+employee_id,name,email,password,department,position,phone
+EMP-2026-0004,Dewi Lestari,dewi@example.com,user123,Finance,Staff,081234567893
+EMP-2026-0005,Rizky Pratama,rizky@example.com,,IT,Engineer,081234567894
+```
+
+Kolom `name` dan `email` wajib. Jika `password` kosong, sistem memakai password default `user123`. Jika `employee_id` sudah ada, data pegawai diperbarui. Jika email sudah digunakan pegawai lain, baris akan ditolak.
+
+## Route Penting
+
+- `/login`
+- `/user/absen`
+- `/admin/dashboard`
+- `/admin/employees`
+- `/admin/employees/create`
+- `/admin/employees/[id]`
+- `/admin/employees/[id]/edit`
+- `/admin/employees/import`
+- `/admin/employees/qr`
+- `/admin/attendance`
+- `/admin/attendance/[id]`
+- `/admin/attendance/[id]/edit`
+- `/admin/reports`
+- `/admin/settings`
+
+## Script
 
 ```bash
-wrangler login
+npm run dev
+npm run lint
+npm run typecheck
+npm run build
+npm run db:generate
+npm run db:migrate
+npm run db:deploy
+npm run db:seed
+npm run pages:build
+npm run pages:deploy
 ```
 
-#### 2. Create D1 Database
+## GitHub
 
 ```bash
-wrangler d1 create absensi-db
+git init
+git add .
+git commit -m "Initial commit: QR attendance system"
+gh repo create sistem-absensi-kantor-qr --private --source=. --remote=origin --push
 ```
 
-Copy output ke `wrangler.toml`:
+Gunakan `--public` jika repository ingin dibuat publik.
 
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "your-database-name"
-database_id = "your-database-id"
-```
+## Deployment Cloudflare
 
-#### 3. Setup Environment untuk Cloudflare
+Project ini menggunakan `@opennextjs/cloudflare`, adapter resmi/kompatibel untuk aplikasi Next.js full-stack di Cloudflare Workers runtime. Di dashboard Cloudflare, resource ini berada di area **Workers & Pages**. Untuk aplikasi Next.js full-stack dengan API route, gunakan OpenNext/Workers runtime, bukan static Pages export.
 
-Di Cloudflare Pages, set environment variables:
-- `JWT_SECRET`
-- `NEXTAUTH_SECRET`
-- `NEXTAUTH_URL`
-- `DATABASE_URL` (format: `sqlite://your-d1-database`)
-
-#### 4. Build dan Deploy
+Build dan deploy manual:
 
 ```bash
 npm run pages:build
 npm run pages:deploy
 ```
 
-### Menggunakan PostgreSQL Eksternal
+Konfigurasi utama:
 
-Jika menggunakan PostgreSQL (Neon, Supabase, Railway):
+- `wrangler.jsonc`
+- `open-next.config.ts`
+- `next.config.ts`
+- `public/_headers`
 
-1. Update `prisma/schema.prisma`:
+Environment variables yang harus diisi di Cloudflare:
 
-```prisma
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+```env
+DATABASE_URL=
+NEXTAUTH_SECRET=
+NEXTAUTH_URL=
+JWT_SECRET=
+APP_TIMEZONE=Asia/Jakarta
 ```
 
-2. Set `DATABASE_URL` ke connection string PostgreSQL
+Untuk PostgreSQL eksternal di Cloudflare Workers, gunakan salah satu:
 
-3. Run migration:
+- Prisma Accelerate URL pada `DATABASE_URL` (`prisma://...`) yang terhubung ke Neon/Supabase/Railway PostgreSQL.
+- Provider PostgreSQL yang expose driver/connection mode kompatibel Workers.
+
+Untuk migration dan seed, jalankan dari lokal/CI dengan `DATABASE_URL` direct PostgreSQL:
 
 ```bash
-npx prisma migrate deploy
+npm run db:deploy
+npm run db:seed
 ```
 
-## API Endpoints
+Setelah deploy, isi `NEXTAUTH_URL` dengan URL production Cloudflare, misalnya:
 
-### Authentication
-- `POST /api/auth/login` - Login
-- `POST /api/auth/logout` - Logout
-- `GET /api/auth/session` - Get current session
-
-### Employees (Admin)
-- `GET /api/employees` - List all employees
-- `POST /api/employees` - Create employee
-- `GET /api/employees/[id]` - Get employee detail
-- `PUT /api/employees/[id]` - Update employee
-- `DELETE /api/employees/[id]` - Delete employee
-- `POST /api/employees/import` - Import from CSV/XLSX
-
-### Attendance
-- `GET /api/attendance` - List attendances (Admin)
-- `GET /api/attendance/today` - Get today's attendance (User)
-- `POST /api/attendance/scan` - Scan QR and create attendance
-- `PUT /api/attendance/[id]` - Update attendance (Admin)
-- `DELETE /api/attendance/[id]` - Delete attendance (Admin)
-- `GET /api/attendance/export` - Export to CSV (Admin)
-
-### Settings (Admin)
-- `GET /api/settings` - Get settings
-- `PUT /api/settings` - Update settings
-
-## Role-Based Access
-
-| Route | Admin | User |
-|-------|-------|------|
-| /admin/* | ✓ | ✗ |
-| /user/absen | ✗ | ✓ |
-| /login | ✓ | ✓ |
-
-## Import CSV Format
-
-File CSV harus memiliki header:
-
-```csv
-employee_id,name,email,password,department,position,phone
-EMP-2024-0001,Budi Santoso,budi@example.com,password123,IT,Engineer,081234567890
-EMP-2024-0002,Siti Rahayu,siti@example.com,,HRD,Manager,081234567891
+```env
+NEXTAUTH_URL=https://sistem-absensi-kantor-qr.<subdomain>.workers.dev
 ```
 
-Kolom `employee_id` dan `password` optional.
+## Deployment Otomatis dari GitHub
 
-## Default Credentials
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@example.com | admin123 |
-| User | user1@example.com | user123 |
-| User | user2@example.com | user123 |
-| User | user3@example.com | user123 |
-
-## Troubleshooting
-
-### Database Issues
+1. Push repo ke GitHub branch `main`.
+2. Di Cloudflare dashboard buka **Workers & Pages**.
+3. Buat aplikasi dari GitHub repository.
+4. Gunakan build command:
 
 ```bash
-# Reset database
-npm run db:reset
-
-# Open Prisma Studio
-npm run db:studio
+npm install && npm run pages:build
 ```
 
-### Build Errors
+5. Set environment variables Cloudflare.
+6. Jalankan migration database dari lokal/CI.
+7. Deploy branch `main`.
 
-```bash
-# Clear cache
-rm -rf .next node_modules/.cache
+## Catatan Keamanan
 
-# Reinstall
-npm install
-```
-
-## License
-
-MIT
+- QR hanya berisi token UUID, bukan password atau data sensitif.
+- Password selalu di-hash dengan bcrypt.
+- Semua API memeriksa session dan role.
+- User hanya bisa membaca/membuat absensi untuk employee miliknya.
+- Admin dapat melihat/mengubah semua pegawai dan absensi.
+- File `.env` tidak boleh di-commit.

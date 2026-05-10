@@ -1,6 +1,6 @@
 export type Role = 'ADMIN' | 'USER';
 
-export type AttendanceStatus = 'HADIR' | 'TERLAMBAT' | 'BELUM_ABEN';
+export type AttendanceStatus = 'HADIR' | 'TERLAMBAT' | 'BELUM_ABSEN';
 
 export interface User {
   id: string;

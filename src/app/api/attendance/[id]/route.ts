@@ -1,10 +1,17 @@
+import { AttendanceStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
+function toJsonValue<T>(value: T) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await getSession();
@@ -13,7 +20,6 @@ export async function GET(
     }
 
     const { id } = await params;
-
     const attendance = await prisma.attendance.findUnique({
       where: { id },
       include: {
@@ -34,7 +40,7 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await getSession();
@@ -43,8 +49,12 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const body = await request.json() as { date?: string; checkInTime?: string; status?: string; note?: string };
-    const { date, checkInTime, status, note } = body;
+    const body = (await request.json()) as {
+      date?: string;
+      checkInTime?: string;
+      status?: AttendanceStatus;
+      note?: string;
+    };
 
     const existingAttendance = await prisma.attendance.findUnique({
       where: { id },
@@ -54,36 +64,34 @@ export async function PUT(
       return NextResponse.json({ error: 'Data tidak ditemukan' }, { status: 404 });
     }
 
-    const oldValue = JSON.stringify(existingAttendance);
+    if (body.status && !Object.values(AttendanceStatus).includes(body.status)) {
+      return NextResponse.json({ error: 'Status absensi tidak valid' }, { status: 400 });
+    }
 
     const attendance = await prisma.attendance.update({
       where: { id },
       data: {
-        date: date || existingAttendance.date,
-        checkInTime: checkInTime ? new Date(checkInTime) : existingAttendance.checkInTime,
-        status: status || existingAttendance.status,
-        note: note !== undefined ? note : existingAttendance.note,
+        date: body.date || existingAttendance.date,
+        checkInTime: body.checkInTime ? new Date(body.checkInTime) : existingAttendance.checkInTime,
+        status: body.status || existingAttendance.status,
+        note: body.note !== undefined ? body.note || null : existingAttendance.note,
         editedByAdminId: session.userId,
         editedAt: new Date(),
       },
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         adminUserId: session.userId,
         action: 'UPDATE',
         entityType: 'ATTENDANCE',
         entityId: id,
-        oldValue,
-        newValue: JSON.stringify(attendance),
+        oldValue: toJsonValue(existingAttendance),
+        newValue: toJsonValue(attendance),
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      attendance,
-    });
+    return NextResponse.json({ success: true, attendance });
   } catch (error) {
     console.error('Update attendance error:', error);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
@@ -92,7 +100,7 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await getSession();
@@ -101,7 +109,6 @@ export async function DELETE(
     }
 
     const { id } = await params;
-
     const existingAttendance = await prisma.attendance.findUnique({
       where: { id },
     });
@@ -114,14 +121,13 @@ export async function DELETE(
       where: { id },
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         adminUserId: session.userId,
         action: 'DELETE',
         entityType: 'ATTENDANCE',
         entityId: id,
-        oldValue: JSON.stringify(existingAttendance),
+        oldValue: toJsonValue(existingAttendance),
       },
     });
 

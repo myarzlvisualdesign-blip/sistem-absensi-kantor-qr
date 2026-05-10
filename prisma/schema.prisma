@@ -3,77 +3,103 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  ADMIN
+  USER
+}
+
+enum AttendanceStatus {
+  HADIR
+  TERLAMBAT
+}
+
 model User {
-  id           String       @id @default(cuid())
-  email        String       @unique
-  password     String
-  name         String
-  role         String       @default("USER")
-  isActive     Boolean      @default(true)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  employee     Employee?
+  id                String       @id @default(cuid())
+  name              String
+  email             String       @unique
+  passwordHash      String       @map("password_hash")
+  role              Role         @default(USER)
+  isActive          Boolean      @default(true) @map("is_active")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  employee          Employee?
+  attendances       Attendance[]
   editedAttendances Attendance[] @relation("EditedBy")
-  adminAuditLogs AuditLog[]
-  attendances  Attendance[]
+  adminAuditLogs    AuditLog[]
+
+  @@map("users")
 }
 
 model Employee {
-  id           String       @id @default(cuid())
-  userId       String       @unique
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employeeId   String       @unique
-  name         String
-  email        String       @unique
-  phone        String?
-  department   String?
-  position     String?
-  qrToken      String       @unique
-  isActive     Boolean      @default(true)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  attendances  Attendance[]
+  id          String       @id @default(cuid())
+  userId      String       @unique @map("user_id")
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId  String       @unique @map("employee_id")
+  name        String
+  email       String       @unique
+  phone       String?
+  department  String?
+  position    String?
+  qrToken     String       @unique @map("qr_token")
+  isActive    Boolean      @default(true) @map("is_active")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  attendances Attendance[]
+
+  @@index([name])
+  @@index([department])
+  @@map("employees")
 }
 
 model Attendance {
-  id               String    @id @default(cuid())
-  userId           String
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employeeId       String
-  employee         Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  date             String
-  checkInTime      DateTime  @default(now())
-  status           String
-  scannedQrToken   String?
-  note             String?
-  editedByAdminId  String?
-  editedBy         User?     @relation("EditedBy", fields: [editedByAdminId], references: [id])
-  editedAt         DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id              String           @id @default(cuid())
+  userId          String           @map("user_id")
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId      String           @map("employee_id")
+  employee        Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date            String
+  checkInTime     DateTime         @default(now()) @map("check_in_time")
+  status          AttendanceStatus
+  scannedQrToken  String?          @map("scanned_qr_token")
+  note            String?
+  editedByAdminId String?          @map("edited_by_admin_id")
+  editedBy        User?            @relation("EditedBy", fields: [editedByAdminId], references: [id])
+  editedAt        DateTime?        @map("edited_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@index([status])
+  @@map("attendances")
 }
 
 model OfficeSetting {
-  id             String   @id @default(cuid())
-  workStartTime  String   @default("08:00")
-  lateLimitTime  String   @default("08:15")
-  companyName    String   @default("PT. Contoh Indonesia")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(cuid())
+  workStartTime String   @default("08:00") @map("work_start_time")
+  lateLimitTime String   @default("08:15") @map("late_limit_time")
+  companyName   String   @default("Sistem Absensi Kantor QR") @map("company_name")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("office_settings")
 }
 
 model AuditLog {
-  id           String   @id @default(cuid())
-  adminUserId  String
-  admin        User     @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
-  action       String
-  entityType   String
-  entityId     String?
-  oldValue     String?
-  newValue     String?
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  adminUserId String   @map("admin_user_id")
+  admin       User     @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  oldValue    Json?    @map("old_value")
+  newValue    Json?    @map("new_value")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
 }

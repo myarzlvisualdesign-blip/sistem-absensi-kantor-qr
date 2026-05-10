@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { formatDate, formatTime, getTodayString } from '@/lib/utils';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+import { NotFoundException } from '@zxing/library';
+import { formatDate, formatTime } from '@/lib/utils';
 
 interface User {
   id: string;
@@ -11,10 +13,11 @@ interface User {
   email: string;
   role: string;
   employeeId?: string;
+  employeeCode?: string;
 }
 
 interface AttendanceStatus {
-  status: 'BELUM_ABEN' | 'HADIR' | 'TERLAMBAT';
+  status: 'BELUM_ABSEN' | 'HADIR' | 'TERLAMBAT';
   checkInTime?: string;
   message?: string;
 }
@@ -49,7 +52,7 @@ export default function UserAbsenPage() {
   const fetchAttendanceStatus = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await fetch(`/api/attendance/today?employeeId=${user.employeeId}`);
+      const res = await fetch('/api/attendance/today');
       if (res.ok) {
         const data: AttendanceStatus = await res.json();
         setAttendanceStatus(data);
@@ -108,10 +111,7 @@ export default function UserAbsenPage() {
       const res = await fetch('/api/attendance/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          employeeId: user.employeeId,
-          scannedToken: result,
-        }),
+        body: JSON.stringify({ scannedToken: result }),
       });
 
       const data: { error?: string; status?: string } = await res.json();
@@ -146,8 +146,11 @@ export default function UserAbsenPage() {
       <header className="bg-white/10 backdrop-blur-sm text-white py-4 px-6">
         <div className="max-w-lg mx-auto flex justify-between items-center">
           <div>
-            <h1 className="font-bold text-lg">Sistem Absensi QR</h1>
-            <p className="text-sm text-white/80">{user.name}</p>
+          <h1 className="font-bold text-lg">Sistem Absensi QR</h1>
+          <p className="text-sm text-white/80">{user.name}</p>
+          {user.employeeCode && (
+            <p className="text-xs text-white/70">{user.employeeCode}</p>
+          )}
           </div>
           <button
             onClick={handleLogout}
@@ -174,7 +177,7 @@ export default function UserAbsenPage() {
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Status Absensi Hari Ini</h2>
 
-          {attendanceStatus?.status === 'BELUM_ABEN' ? (
+          {attendanceStatus?.status === 'BELUM_ABSEN' ? (
             <div className="text-center py-4">
               <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-10 h-10 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -216,7 +219,7 @@ export default function UserAbsenPage() {
         </div>
 
         {/* Absen Button */}
-        {attendanceStatus?.status === 'BELUM_ABEN' && (
+        {attendanceStatus?.status === 'BELUM_ABSEN' && (
           <button
             onClick={handleOpenScanner}
             disabled={isSubmitting}
@@ -236,9 +239,9 @@ export default function UserAbsenPage() {
           </button>
         )}
 
-        {attendanceStatus?.status !== 'BELUM_ABEN' && (
+        {attendanceStatus?.status !== 'BELUM_ABSEN' && (
           <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 text-center text-white">
-            <p className="font-medium">Anda sudah完成 absen untuk hari ini</p>
+            <p className="font-medium">Anda sudah absen untuk hari ini</p>
           </div>
         )}
       </main>
@@ -333,34 +336,76 @@ interface QRCodeReaderProps {
 
 function QRCodeReader({ onScan }: QRCodeReaderProps) {
   const [error, setError] = useState<string>('');
+  const [isStarting, setIsStarting] = useState(true);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
-    // For demo purposes, we'll use a simulated QR scan
-    // In production, integrate with html5-qrcode or similar library
-    const timer = setTimeout(() => {
-      // Simulate a scan after 3 seconds for demo
-      // Remove this in production and use actual camera
-    }, 3000);
+    let isMounted = true;
+    let stopScanner: (() => void) | undefined;
 
-    return () => clearTimeout(timer);
-  }, []);
+    const startScanner = async () => {
+      try {
+        if (!videoRef.current) return;
+
+        const codeReader = new BrowserMultiFormatReader();
+        const controls = await codeReader.decodeFromVideoDevice(
+          undefined,
+          videoRef.current,
+          (result, scanError, scannerControls) => {
+            if (result) {
+              scannerControls.stop();
+              onScan(result.getText());
+              return;
+            }
+
+            if (scanError && !(scanError instanceof NotFoundException)) {
+              setError('Kamera belum bisa membaca QR/barcode. Coba arahkan ulang.');
+            }
+          },
+        );
+
+        stopScanner = controls.stop;
+        if (isMounted) setIsStarting(false);
+      } catch {
+        if (isMounted) {
+          setIsStarting(false);
+          setError('Kamera tidak tersedia atau izin kamera ditolak');
+        }
+      }
+    };
+
+    startScanner();
+
+    return () => {
+      isMounted = false;
+      stopScanner?.();
+    };
+  }, [onScan]);
 
   if (error) {
     return (
-      <div className="text-center p-4 text-red-500">
-        <p>{error}</p>
+      <div className="text-center p-4 text-red-600">
+        <p className="text-sm font-medium">{error}</p>
       </div>
     );
   }
 
   return (
-    <div className="text-center text-gray-500 p-8">
-      <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-      <p className="text-sm">Kamera tidak tersedia</p>
-      <p className="text-xs mt-2">Gunakan input manual</p>
+    <div className="h-full w-full bg-black">
+      <video
+        ref={videoRef}
+        className="h-full w-full object-cover"
+        muted
+        playsInline
+      />
+      {isStarting && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-white">
+          <div className="text-center">
+            <div className="spinner mx-auto mb-3"></div>
+            <p className="text-sm">Membuka kamera...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

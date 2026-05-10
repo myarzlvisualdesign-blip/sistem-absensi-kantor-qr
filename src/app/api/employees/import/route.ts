@@ -1,9 +1,47 @@
-import { NextResponse } from 'next/server';
-import prisma from '@/lib/db';
-import { Prisma } from '@prisma/client';
-import { getSession } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
-import { generateQRToken, generateEmployeeId as genEmpId } from '@/lib/utils';
+import { NextResponse } from 'next/server';
+import * as XLSX from 'xlsx';
+import prisma from '@/lib/db';
+import { getSession } from '@/lib/auth';
+import { emptyToNull, generateEmployeeId, generateQRToken, normalizeEmail } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
+
+type ImportRow = {
+  employee_id?: string;
+  name?: string;
+  email?: string;
+  password?: string;
+  department?: string;
+  position?: string;
+  phone?: string;
+};
+
+function normalizeRow(row: Record<string, unknown>): ImportRow {
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(row)) {
+    normalized[key.trim().toLowerCase()] = String(value ?? '').trim();
+  }
+  return normalized;
+}
+
+async function createUniqueEmployeeId(): Promise<string> {
+  for (let i = 0; i < 8; i++) {
+    const employeeId = generateEmployeeId();
+    const exists = await prisma.employee.findUnique({ where: { employeeId } });
+    if (!exists) return employeeId;
+  }
+  throw new Error('Gagal membuat employee ID unik');
+}
+
+async function createUniqueQrToken(): Promise<string> {
+  for (let i = 0; i < 8; i++) {
+    const qrToken = generateQRToken();
+    const exists = await prisma.employee.findUnique({ where: { qrToken } });
+    if (!exists) return qrToken;
+  }
+  throw new Error('Gagal membuat QR token unik');
+}
 
 export async function POST(request: Request) {
   try {
@@ -13,81 +51,109 @@ export async function POST(request: Request) {
     }
 
     const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const file = formData.get('file') as File | null;
 
     if (!file) {
       return NextResponse.json({ error: 'File diperlukan' }, { status: 400 });
     }
 
-    // Read file
-    const text = await file.text();
-    const lines = text.split('\n').filter((line) => line.trim());
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
 
-    if (lines.length < 2) {
+    if (rawRows.length === 0) {
       return NextResponse.json({ error: 'File tidak memiliki data' }, { status: 400 });
-    }
-
-    // Parse header
-    const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-    const requiredHeaders = ['name', 'email'];
-    const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
-
-    if (missingHeaders.length > 0) {
-      return NextResponse.json(
-        { error: `Header tidak ditemukan: ${missingHeaders.join(', ')}` },
-        { status: 400 }
-      );
     }
 
     const result = {
       success: 0,
+      created: 0,
+      updated: 0,
       failed: 0,
       errors: [] as Array<{ row: number; error: string }>,
     };
 
-    // Process rows
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map((v) => v.trim());
-      const row: Record<string, string> = {};
+    for (const [index, rawRow] of rawRows.entries()) {
+      const rowNumber = index + 2;
+      const row = normalizeRow(rawRow);
+      const name = row.name?.trim();
+      const email = row.email ? normalizeEmail(row.email) : '';
+      const employeeId = row.employee_id?.trim() || await createUniqueEmployeeId();
+      const password = row.password?.trim() || 'user123';
 
-      headers.forEach((header, index) => {
-        row[header] = values[index] || '';
-      });
+      if (!name || !email) {
+        result.failed++;
+        result.errors.push({ row: rowNumber, error: 'Kolom name dan email wajib diisi' });
+        continue;
+      }
 
       try {
-        const { name, email, password, department, position, phone } = row;
-
-        if (!name || !email) {
-          result.failed++;
-          result.errors.push({ row: i + 1, error: 'Nama dan email diperlukan' });
-          continue;
-        }
-
-        // Check if email exists
-        const existingUser = await prisma.user.findUnique({
-          where: { email: email.toLowerCase() },
+        const existingEmployeeById = await prisma.employee.findUnique({
+          where: { employeeId },
+          include: { user: true },
         });
 
-        if (existingUser) {
-          result.failed++;
-          result.errors.push({ row: i + 1, error: `Email ${email} sudah terdaftar` });
+        if (existingEmployeeById) {
+          const existingEmailOwner = await prisma.user.findUnique({ where: { email } });
+          if (existingEmailOwner && existingEmailOwner.id !== existingEmployeeById.userId) {
+            result.failed++;
+            result.errors.push({ row: rowNumber, error: `Email ${email} sudah digunakan pegawai lain` });
+            continue;
+          }
+
+          const passwordData = row.password?.trim()
+            ? { passwordHash: await bcrypt.hash(password, 12) }
+            : {};
+
+          await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+              where: { id: existingEmployeeById.userId },
+              data: {
+                name,
+                email,
+                isActive: true,
+                ...passwordData,
+              },
+            });
+            await tx.employee.update({
+              where: { id: existingEmployeeById.id },
+              data: {
+                name,
+                email,
+                phone: emptyToNull(row.phone),
+                department: emptyToNull(row.department),
+                position: emptyToNull(row.position),
+                isActive: true,
+              },
+            });
+          });
+
+          result.success++;
+          result.updated++;
           continue;
         }
 
-        // Generate password if not provided
-        const pwd = password || Math.random().toString(36).slice(-8);
-        const hashedPassword = await bcrypt.hash(pwd, 10);
+        const [existingUser, existingEmployeeEmail] = await Promise.all([
+          prisma.user.findUnique({ where: { email } }),
+          prisma.employee.findUnique({ where: { email } }),
+        ]);
 
-        // Generate IDs
-        const employeeId = row.employee_id || genEmpId();
-        const qrToken = generateQRToken();
+        if (existingUser || existingEmployeeEmail) {
+          result.failed++;
+          result.errors.push({ row: rowNumber, error: `Email ${email} sudah terdaftar` });
+          continue;
+        }
 
-        // Create user and employee
-        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-          const newUser = await tx.user.create({
+        const passwordHash = await bcrypt.hash(password, 12);
+        const qrToken = await createUniqueQrToken();
+
+        await prisma.$transaction(async (tx) => {
+          const user = await tx.user.create({
             data: {
-              email: email.toLowerCase(),
-              password: hashedPassword,
+              email,
+              passwordHash,
               name,
               role: 'USER',
               isActive: true,
@@ -96,13 +162,13 @@ export async function POST(request: Request) {
 
           await tx.employee.create({
             data: {
-              userId: newUser.id,
+              userId: user.id,
               employeeId,
               name,
-              email: email.toLowerCase(),
-              phone: phone || null,
-              department: department || null,
-              position: position || null,
+              email,
+              phone: emptyToNull(row.phone),
+              department: emptyToNull(row.department),
+              position: emptyToNull(row.position),
               qrToken,
               isActive: true,
             },
@@ -110,22 +176,19 @@ export async function POST(request: Request) {
         });
 
         result.success++;
+        result.created++;
       } catch (error) {
         result.failed++;
-        result.errors.push({ row: i + 1, error: 'Terjadi kesalahan saat memproses' });
+        result.errors.push({ row: rowNumber, error: 'Terjadi kesalahan saat memproses baris' });
       }
     }
 
-    // Create audit log
     await prisma.auditLog.create({
       data: {
         adminUserId: session.userId,
         action: 'IMPORT',
         entityType: 'EMPLOYEES',
-        newValue: JSON.stringify({
-          success: result.success,
-          failed: result.failed,
-        }),
+        newValue: result,
       },
     });
 

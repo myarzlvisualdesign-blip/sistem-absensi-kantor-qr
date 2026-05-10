@@ -1,26 +1,20 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaD1 } from '@prisma/adapter-d1';
-
-declare global {
-  interface CloudflareEnv {
-    absensi_db: D1Database;
-  }
-}
+import { withAccelerate } from '@prisma/extension-accelerate';
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
+  prisma?: ReturnType<typeof createPrismaClient>;
 };
 
-export function createPrismaClient(env: CloudflareEnv | Record<string, any>) {
-  if (env?.absensi_db) {
-    const adapter = new PrismaD1(env.absensi_db);
-    return new PrismaClient({ adapter } as any);
-  }
-  return new PrismaClient();
+function createPrismaClient() {
+  return new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  }).$extends(withAccelerate());
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient({});
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}
 
 export default prisma;

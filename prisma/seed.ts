@@ -1,108 +1,121 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Starting seed...');
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-  // Create office settings
-  const existingSettings = await prisma.officeSetting.findFirst();
-  if (!existingSettings) {
-    await prisma.officeSetting.create({
-      data: {
-        workStartTime: '08:00',
-        lateLimitTime: '08:15',
-        companyName: 'PT. Contoh Indonesia',
-      },
-    });
-    console.log('Created office settings');
-  }
-
-  // Create admin user
-  const adminExists = await prisma.user.findUnique({
-    where: { email: 'admin@example.com' },
+  await prisma.officeSetting.upsert({
+    where: { id: 'default-office-setting' },
+    update: {
+      workStartTime: '08:00',
+      lateLimitTime: '08:15',
+      companyName: 'Sistem Absensi Kantor QR',
+    },
+    create: {
+      id: 'default-office-setting',
+      workStartTime: '08:00',
+      lateLimitTime: '08:15',
+      companyName: 'Sistem Absensi Kantor QR',
+    },
   });
 
-  if (!adminExists) {
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-    await prisma.user.create({
-      data: {
-        email: 'admin@example.com',
-        password: hashedPassword,
-        name: 'Administrator',
-        role: 'ADMIN',
+  await prisma.user.upsert({
+    where: { email: adminEmail },
+    update: {
+      name: 'Administrator',
+      role: 'ADMIN',
+      isActive: true,
+    },
+    create: {
+      email: adminEmail,
+      passwordHash: await bcrypt.hash(adminPassword, 12),
+      name: 'Administrator',
+      role: 'ADMIN',
+      isActive: true,
+    },
+  });
+
+  const employees = [
+    {
+      employeeId: 'EMP-2026-0001',
+      email: 'user1@example.com',
+      name: 'Budi Santoso',
+      phone: '081234567890',
+      department: 'IT',
+      position: 'Software Engineer',
+    },
+    {
+      employeeId: 'EMP-2026-0002',
+      email: 'user2@example.com',
+      name: 'Siti Rahayu',
+      phone: '081234567891',
+      department: 'HRD',
+      position: 'HR Manager',
+    },
+    {
+      employeeId: 'EMP-2026-0003',
+      email: 'user3@example.com',
+      name: 'Ahmad Fauzi',
+      phone: '081234567892',
+      department: 'Marketing',
+      position: 'Marketing Specialist',
+    },
+  ];
+
+  for (const employeeData of employees) {
+    const user = await prisma.user.upsert({
+      where: { email: employeeData.email },
+      update: {
+        name: employeeData.name,
+        role: 'USER',
+        isActive: true,
+      },
+      create: {
+        email: employeeData.email,
+        passwordHash: await bcrypt.hash('user123', 12),
+        name: employeeData.name,
+        role: 'USER',
         isActive: true,
       },
     });
-    console.log('Created admin user: admin@example.com / admin123');
-  }
 
-  // Create dummy employees
-  const dummyUsers = [
-    { email: 'user1@example.com', name: 'Budi Santoso', department: 'IT', position: 'Software Engineer' },
-    { email: 'user2@example.com', name: 'Siti Rahayu', department: 'HRD', position: 'HR Manager' },
-    { email: 'user3@example.com', name: 'Ahmad Fauzi', department: 'Marketing', position: 'Marketing Specialist' },
-  ];
-
-  for (const userData of dummyUsers) {
-    const userExists = await prisma.user.findUnique({
-      where: { email: userData.email },
+    await prisma.employee.upsert({
+      where: { employeeId: employeeData.employeeId },
+      update: {
+        userId: user.id,
+        name: employeeData.name,
+        email: employeeData.email,
+        phone: employeeData.phone,
+        department: employeeData.department,
+        position: employeeData.position,
+        isActive: true,
+      },
+      create: {
+        userId: user.id,
+        employeeId: employeeData.employeeId,
+        name: employeeData.name,
+        email: employeeData.email,
+        phone: employeeData.phone,
+        department: employeeData.department,
+        position: employeeData.position,
+        qrToken: crypto.randomUUID(),
+        isActive: true,
+      },
     });
-
-    if (!userExists) {
-      const hashedPassword = await bcrypt.hash('user123', 10);
-      const qrToken = generateQRToken();
-
-      const user = await prisma.user.create({
-        data: {
-          email: userData.email,
-          password: hashedPassword,
-          name: userData.name,
-          role: 'USER',
-          isActive: true,
-        },
-      });
-
-      await prisma.employee.create({
-        data: {
-          userId: user.id,
-          employeeId: generateEmployeeId(),
-          name: userData.name,
-          email: userData.email,
-          phone: '08' + Math.floor(Math.random() * 100000000).toString().padStart(8, '0'),
-          department: userData.department,
-          position: userData.position,
-          qrToken: qrToken,
-          isActive: true,
-        },
-      });
-
-      console.log(`Created user: ${userData.email} / user123`);
-    }
   }
 
-  console.log('Seed completed!');
-}
-
-function generateQRToken(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-
-function generateEmployeeId(): string {
-  const year = new Date().getFullYear();
-  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `EMP-${year}-${random}`;
+  console.log('Seed selesai');
+  console.log(`Admin: ${adminEmail} / ${adminPassword}`);
+  console.log('User dummy: user1@example.com, user2@example.com, user3@example.com / user123');
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
+  .catch((error) => {
+    console.error(error);
     process.exit(1);
   })
   .finally(async () => {

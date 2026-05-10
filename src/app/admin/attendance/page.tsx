@@ -28,6 +28,7 @@ export default function AttendancePage() {
     startDate: '',
     endDate: '',
     name: '',
+    employeeId: '',
     department: '',
     status: '',
   });
@@ -61,10 +62,10 @@ export default function AttendancePage() {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (format: 'csv' | 'xlsx') => {
     try {
       const params = new URLSearchParams({
-        export: 'true',
+        format,
         ...Object.fromEntries(
           Object.entries(filters).filter(([, v]) => v)
         ),
@@ -76,7 +77,7 @@ export default function AttendancePage() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `absensi_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `absensi_${new Date().toISOString().split('T')[0]}.${format}`;
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
@@ -88,6 +89,23 @@ export default function AttendancePage() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm('Hapus data absensi ini?')) return;
+
+    try {
+      const res = await fetch(`/api/attendance/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json() as { error?: string };
+        toast.error(data.error || 'Gagal menghapus data');
+        return;
+      }
+      toast.success('Data absensi dihapus');
+      fetchAttendances();
+    } catch {
+      toast.error('Gagal menghapus data');
+    }
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
@@ -95,9 +113,14 @@ export default function AttendancePage() {
           <h1 className="text-2xl font-bold text-gray-900">Data Absensi</h1>
           <p className="text-gray-500">Kelola data absensi pegawai</p>
         </div>
-        <button onClick={handleExport} className="btn-primary">
-          Export CSV
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => handleExport('csv')} className="btn-secondary">
+            Export CSV
+          </button>
+          <button onClick={() => handleExport('xlsx')} className="btn-primary">
+            Export XLSX
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -132,6 +155,16 @@ export default function AttendancePage() {
             />
           </div>
           <div>
+            <label className="block text-xs text-gray-500 mb-1">NIP/ID</label>
+            <input
+              type="text"
+              placeholder="EMP-..."
+              value={filters.employeeId}
+              onChange={(e) => setFilters({ ...filters, employeeId: e.target.value })}
+              className="input-field text-sm"
+            />
+          </div>
+          <div>
             <label className="block text-xs text-gray-500 mb-1">Departemen</label>
             <input
               type="text"
@@ -155,7 +188,7 @@ export default function AttendancePage() {
           </div>
           <div className="flex items-end">
             <button
-              onClick={() => setFilters({ startDate: '', endDate: '', name: '', department: '', status: '' })}
+              onClick={() => setFilters({ startDate: '', endDate: '', name: '', employeeId: '', department: '', status: '' })}
               className="btn-secondary text-sm"
             >
               Reset
@@ -202,10 +235,17 @@ export default function AttendancePage() {
                           {attendance.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
                         <Link href={`/admin/attendance/${attendance.id}`} className="text-primary-600 hover:text-primary-900">
                           Edit
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(attendance.id)}
+                          className="ml-3 text-red-600 hover:text-red-900"
+                        >
+                          Hapus
+                        </button>
                       </td>
                     </tr>
                   ))}

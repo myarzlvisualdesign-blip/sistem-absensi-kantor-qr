@@ -1,34 +1,28 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import prisma from '@/lib/db';
-import { getTodayString, isLate } from '@/lib/utils';
+import { getTodayString } from '@/lib/utils';
 
-export async function GET(request: Request) {
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
   try {
     const session = await getSession();
-    if (!session || session.role !== 'USER') {
+    if (!session || session.role !== 'USER' || !session.employeeId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const employeeId = searchParams.get('employeeId') || session.employeeId;
-
-    if (!employeeId) {
-      return NextResponse.json({ error: 'Employee ID required' }, { status: 400 });
-    }
-
     const today = getTodayString();
-
     const attendance = await prisma.attendance.findFirst({
       where: {
-        employeeId,
+        employeeId: session.employeeId,
         date: today,
       },
     });
 
     if (!attendance) {
       return NextResponse.json({
-        status: 'BELUM_ABEN',
+        status: 'BELUM_ABSEN',
         message: 'Anda belum absen hari ini',
       });
     }

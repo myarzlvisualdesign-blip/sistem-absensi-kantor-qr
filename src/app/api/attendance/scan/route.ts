@@ -2,87 +2,64 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import prisma from '@/lib/db';
 import { getTodayString, isLate } from '@/lib/utils';
+import { validateQRToken } from '@/lib/qr';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
     const session = await getSession();
-    if (!session || session.role !== 'USER') {
+    if (!session || session.role !== 'USER' || !session.employeeId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { employeeId, scannedToken } = await request.json() as { employeeId: string; scannedToken: string };
-
-    if (!employeeId || !scannedToken) {
-      return NextResponse.json(
-        { error: 'Employee ID dan QR token diperlukan' },
-        { status: 400 }
-      );
+    const { scannedToken } = (await request.json()) as { scannedToken?: string };
+    if (!scannedToken || !validateQRToken(scannedToken)) {
+      return NextResponse.json({ error: 'QR/barcode tidak valid' }, { status: 400 });
     }
 
-    // Verify employee belongs to this user
-    if (session.employeeId !== employeeId) {
-      return NextResponse.json(
-        { error: 'Anda tidak dapat absen untuk pegawai lain' },
-        { status: 403 }
-      );
-    }
-
-    // Get employee data
     const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
+      where: { id: session.employeeId },
+      include: {
+        user: {
+          select: { id: true, isActive: true },
+        },
+      },
     });
 
-    if (!employee) {
-      return NextResponse.json(
-        { error: 'Data pegawai tidak ditemukan' },
-        { status: 404 }
-      );
+    if (!employee || !employee.isActive || !employee.user.isActive) {
+      return NextResponse.json({ error: 'Data pegawai tidak aktif atau belum terdaftar' }, { status: 403 });
     }
 
-    if (!employee.isActive) {
-      return NextResponse.json(
-        { error: 'Akun pegawai tidak aktif' },
-        { status: 403 }
-      );
+    if (employee.userId !== session.userId) {
+      return NextResponse.json({ error: 'Session tidak cocok dengan data pegawai' }, { status: 403 });
     }
 
-    // Verify QR token matches
     if (employee.qrToken !== scannedToken) {
-      return NextResponse.json(
-        { error: 'QR Code tidak valid. Pastikan Anda scan QR Anda sendiri.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'QR/barcode tidak cocok dengan pegawai yang sedang login' }, { status: 400 });
     }
 
-    // Check if already attended today
     const today = getTodayString();
     const existingAttendance = await prisma.attendance.findFirst({
       where: {
-        employeeId,
+        employeeId: employee.id,
         date: today,
       },
     });
 
     if (existingAttendance) {
-      return NextResponse.json(
-        { error: 'Anda sudah absen hari ini' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Anda sudah absen hari ini' }, { status: 409 });
     }
 
-    // Get office settings for late check
     const settings = await prisma.officeSetting.findFirst();
     const lateLimitTime = settings?.lateLimitTime || '08:15';
-
-    // Determine attendance status
     const now = new Date();
     const status = isLate(now, lateLimitTime) ? 'TERLAMBAT' : 'HADIR';
 
-    // Create attendance record
     const attendance = await prisma.attendance.create({
       data: {
         userId: session.userId,
-        employeeId,
+        employeeId: employee.id,
         date: today,
         checkInTime: now,
         status,
@@ -100,9 +77,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Scan attendance error:', error);
-    return NextResponse.json(
-      { error: 'Terjadi kesalahan server' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }
