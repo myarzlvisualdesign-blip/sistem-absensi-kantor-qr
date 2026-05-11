@@ -1,23 +1,48 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import prisma from '@/lib/db';
+import { createMockScanAttendance, shouldUseMockData } from '@/lib/mock-store';
 import { getTodayString, isLate } from '@/lib/utils';
 import { validateQRToken } from '@/lib/qr';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  let scannedToken = '';
+
   try {
     const session = await getSession();
     if (!session || session.role !== 'USER' || !session.employeeId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { scannedToken } = (await request.json()) as { scannedToken?: string };
+    ({ scannedToken = '' } = (await request.json()) as { scannedToken?: string });
     if (!scannedToken || !validateQRToken(scannedToken)) {
       return NextResponse.json({ error: 'QR/barcode tidak valid' }, { status: 400 });
     }
 
+    if (shouldUseMockData()) {
+      try {
+        const attendance = createMockScanAttendance({
+          userId: session.userId,
+          employeeId: session.employeeId,
+        }, scannedToken);
+
+        return NextResponse.json({
+          success: true,
+          status: attendance.status,
+          checkInTime: attendance.checkInTime.toISOString(),
+          message: attendance.status === 'TERLAMBAT'
+            ? 'Absen berhasil dengan status TERLAMBAT'
+            : 'Absen berhasil dengan status HADIR',
+        });
+      } catch (mockError) {
+        const message = mockError instanceof Error ? mockError.message : 'Terjadi kesalahan server';
+        const status = message === 'Anda sudah absen hari ini' ? 409 : 400;
+        return NextResponse.json({ error: message }, { status });
+      }
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const employee = await prisma.employee.findUnique({
       where: { id: session.employeeId },
       include: {
@@ -77,6 +102,28 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Scan attendance error:', error);
+    const session = await getSession();
+    if (session?.role === 'USER' && session.employeeId && scannedToken) {
+      try {
+        const attendance = createMockScanAttendance({
+          userId: session.userId,
+          employeeId: session.employeeId,
+        }, scannedToken);
+
+        return NextResponse.json({
+          success: true,
+          status: attendance.status,
+          checkInTime: attendance.checkInTime.toISOString(),
+          message: attendance.status === 'TERLAMBAT'
+            ? 'Absen berhasil dengan status TERLAMBAT'
+            : 'Absen berhasil dengan status HADIR',
+        });
+      } catch (mockError) {
+        const message = mockError instanceof Error ? mockError.message : 'Terjadi kesalahan server';
+        const status = message === 'Anda sudah absen hari ini' ? 409 : 400;
+        return NextResponse.json({ error: message }, { status });
+      }
+    }
     return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import prisma from '@/lib/db';
+import { getMockTodayAttendance, shouldUseMockData } from '@/lib/mock-store';
 import { getTodayString } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +13,23 @@ export async function GET() {
     }
 
     const today = getTodayString();
+    if (shouldUseMockData()) {
+      const attendance = getMockTodayAttendance(session.employeeId);
+      if (!attendance) {
+        return NextResponse.json({
+          status: 'BELUM_ABSEN',
+          message: 'Anda belum absen hari ini',
+        });
+      }
+
+      return NextResponse.json({
+        status: attendance.status,
+        checkInTime: attendance.checkInTime.toISOString(),
+        attendanceId: attendance.id,
+      });
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const attendance = await prisma.attendance.findFirst({
       where: {
         employeeId: session.employeeId,
@@ -34,6 +51,22 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Get today attendance error:', error);
+    const session = await getSession();
+    if (session?.role === 'USER' && session.employeeId) {
+      const attendance = getMockTodayAttendance(session.employeeId);
+      if (!attendance) {
+        return NextResponse.json({
+          status: 'BELUM_ABSEN',
+          message: 'Anda belum absen hari ini',
+        });
+      }
+
+      return NextResponse.json({
+        status: attendance.status,
+        checkInTime: attendance.checkInTime.toISOString(),
+        attendanceId: attendance.id,
+      });
+    }
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

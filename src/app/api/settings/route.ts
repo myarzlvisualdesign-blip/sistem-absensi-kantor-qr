@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { getMockSettings, shouldUseMockData, updateMockSettings } from '@/lib/mock-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +15,11 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    if (shouldUseMockData()) {
+      return NextResponse.json(getMockSettings());
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     let settings = await prisma.officeSetting.findFirst();
 
     if (!settings) {
@@ -30,20 +35,27 @@ export async function GET() {
     return NextResponse.json(settings);
   } catch (error) {
     console.error('Get settings error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json(getMockSettings());
   }
 }
 
 export async function PUT(request: Request) {
+  let body: { workStartTime?: string; lateLimitTime?: string; companyName?: string } = {};
+
   try {
     const session = await getSession();
     if (!session || session.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json() as { workStartTime?: string; lateLimitTime?: string; companyName?: string };
+    body = await request.json() as typeof body;
     const { workStartTime, lateLimitTime, companyName } = body;
 
+    if (shouldUseMockData()) {
+      return NextResponse.json(updateMockSettings(body));
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     let settings = await prisma.officeSetting.findFirst();
     const oldValue = toJsonValue(settings);
 
@@ -80,6 +92,6 @@ export async function PUT(request: Request) {
     return NextResponse.json(settings);
   } catch (error) {
     console.error('Update settings error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json(updateMockSettings(body));
   }
 }

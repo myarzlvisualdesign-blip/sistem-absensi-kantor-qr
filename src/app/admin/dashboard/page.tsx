@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
-import prisma from '@/lib/db';
+import { getMockDashboardSnapshot, shouldUseMockData } from '@/lib/mock-store';
 import { getTodayString } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -14,39 +14,64 @@ export default async function AdminDashboardPage() {
 
   const today = getTodayString();
 
-  // Get statistics
-  const totalEmployees = await prisma.employee.count();
-  const activeEmployees = await prisma.employee.count({
-    where: { isActive: true },
-  });
+  let dashboardData;
 
-  const hadirToday = await prisma.attendance.count({
-    where: {
-      date: today,
-      status: 'HADIR',
-    },
-  });
+  if (shouldUseMockData()) {
+    dashboardData = getMockDashboardSnapshot();
+  } else try {
+    const { default: prisma } = await import('@/lib/db');
+    const totalEmployees = await prisma.employee.count();
+    const activeEmployees = await prisma.employee.count({
+      where: { isActive: true },
+    });
 
-  const terlambatToday = await prisma.attendance.count({
-    where: {
-      date: today,
-      status: 'TERLAMBAT',
-    },
-  });
+    const hadirToday = await prisma.attendance.count({
+      where: {
+        date: today,
+        status: 'HADIR',
+      },
+    });
 
-  const belumAbsenToday = activeEmployees - hadirToday - terlambatToday;
+    const terlambatToday = await prisma.attendance.count({
+      where: {
+        date: today,
+        status: 'TERLAMBAT',
+      },
+    });
 
-  // Get recent attendance
-  const recentAttendances = await prisma.attendance.findMany({
-    take: 10,
-    orderBy: { checkInTime: 'desc' },
-    include: {
-      employee: true,
-    },
-  });
+    const recentAttendances = await prisma.attendance.findMany({
+      take: 10,
+      orderBy: { checkInTime: 'desc' },
+      include: {
+        employee: true,
+      },
+    });
 
-  // Get office settings
-  const settings = await prisma.officeSetting.findFirst();
+    const settings = await prisma.officeSetting.findFirst();
+
+    dashboardData = {
+      totalEmployees,
+      activeEmployees,
+      hadirToday,
+      terlambatToday,
+      belumAbsenToday: activeEmployees - hadirToday - terlambatToday,
+      recentAttendances,
+      settings,
+    };
+  } catch (error) {
+    console.error('Dashboard database fallback:', error);
+    dashboardData = getMockDashboardSnapshot();
+  }
+
+  const {
+    totalEmployees,
+    activeEmployees,
+    hadirToday,
+    terlambatToday,
+    belumAbsenToday,
+    recentAttendances,
+    settings,
+  } = dashboardData;
 
   return (
     <div>

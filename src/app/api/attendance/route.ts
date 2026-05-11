@@ -1,7 +1,7 @@
 import { AttendanceStatus, Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { listMockAttendances, shouldUseMockData } from '@/lib/mock-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +50,18 @@ export async function GET(request: Request) {
     const skip = (Math.max(page, 1) - 1) * limit;
     const where = buildAttendanceWhere(searchParams);
 
+    if (shouldUseMockData()) {
+      return NextResponse.json(listMockAttendances({
+        startDate: searchParams.get('startDate'),
+        endDate: searchParams.get('endDate'),
+        name: searchParams.get('name'),
+        employeeId: searchParams.get('employeeId'),
+        department: searchParams.get('department'),
+        status: searchParams.get('status'),
+      }, page, limit));
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const [attendances, total] = await Promise.all([
       prisma.attendance.findMany({
         where,
@@ -70,6 +82,15 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('Get attendances error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    const { searchParams } = new URL(request.url);
+    const page = Number(searchParams.get('page') || '1');
+    return NextResponse.json(listMockAttendances({
+      startDate: searchParams.get('startDate'),
+      endDate: searchParams.get('endDate'),
+      name: searchParams.get('name'),
+      employeeId: searchParams.get('employeeId'),
+      department: searchParams.get('department'),
+      status: searchParams.get('status'),
+    }, page));
   }
 }

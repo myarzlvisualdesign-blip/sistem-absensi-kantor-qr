@@ -1,8 +1,8 @@
 import { AttendanceStatus, Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import prisma from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { exportMockAttendances, MockAttendance, shouldUseMockData } from '@/lib/mock-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +41,76 @@ function escapeCsvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
+function createExportResponse(attendances: Array<MockAttendance | {
+  date: string;
+  checkInTime: Date | string;
+  status: string;
+  note: string | null;
+  employee: {
+    name: string;
+    employeeId: string;
+    email: string;
+    department: string | null;
+    position: string | null;
+  };
+}>, format: 'csv' | 'xlsx') {
+  const rows = attendances.map((attendance) => ({
+    Tanggal: attendance.date,
+    'Jam Absen': new Date(attendance.checkInTime).toLocaleTimeString('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }),
+    'Nama Pegawai': attendance.employee?.name || '',
+    'Employee ID / NIP': attendance.employee?.employeeId || '',
+    Email: attendance.employee?.email || '',
+    Departemen: attendance.employee?.department || '',
+    Jabatan: attendance.employee?.position || '',
+    Status: attendance.status,
+    Catatan: attendance.note || '',
+  }));
+
+  const dateLabel = new Date().toISOString().split('T')[0];
+
+  if (format === 'xlsx') {
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Absensi');
+    const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+    return new NextResponse(data, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="absensi_${dateLabel}.xlsx"`,
+      },
+    });
+  }
+
+  const headers = [
+    'Tanggal',
+    'Jam Absen',
+    'Nama Pegawai',
+    'Employee ID / NIP',
+    'Email',
+    'Departemen',
+    'Jabatan',
+    'Status',
+    'Catatan',
+  ];
+
+  const csv = [
+    headers.map(escapeCsvCell).join(','),
+    ...rows.map((row) => headers.map((header) => escapeCsvCell(String(row[header as keyof typeof row]))).join(',')),
+  ].join('\n');
+
+  return new NextResponse(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="absensi_${dateLabel}.csv"`,
+    },
+  });
+}
+
 export async function GET(request: Request) {
   try {
     const session = await getSession();
@@ -52,6 +122,19 @@ export async function GET(request: Request) {
     const format = searchParams.get('format') === 'xlsx' ? 'xlsx' : 'csv';
     const where = buildAttendanceWhere(searchParams);
 
+    if (shouldUseMockData()) {
+      const attendances = exportMockAttendances({
+        startDate: searchParams.get('startDate'),
+        endDate: searchParams.get('endDate'),
+        name: searchParams.get('name'),
+        employeeId: searchParams.get('employeeId'),
+        department: searchParams.get('department'),
+        status: searchParams.get('status'),
+      });
+      return createExportResponse(attendances, format);
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const attendances = await prisma.attendance.findMany({
       where,
       orderBy: { checkInTime: 'desc' },
@@ -60,63 +143,19 @@ export async function GET(request: Request) {
       },
     });
 
-    const rows = attendances.map((attendance) => ({
-      Tanggal: attendance.date,
-      'Jam Absen': new Date(attendance.checkInTime).toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }),
-      'Nama Pegawai': attendance.employee.name,
-      'Employee ID / NIP': attendance.employee.employeeId,
-      Email: attendance.employee.email,
-      Departemen: attendance.employee.department || '',
-      Jabatan: attendance.employee.position || '',
-      Status: attendance.status,
-      Catatan: attendance.note || '',
-    }));
-
-    const dateLabel = new Date().toISOString().split('T')[0];
-
-    if (format === 'xlsx') {
-      const worksheet = XLSX.utils.json_to_sheet(rows);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Absensi');
-      const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
-
-      return new NextResponse(data, {
-        headers: {
-          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'Content-Disposition': `attachment; filename="absensi_${dateLabel}.xlsx"`,
-        },
-      });
-    }
-
-    const headers = [
-      'Tanggal',
-      'Jam Absen',
-      'Nama Pegawai',
-      'Employee ID / NIP',
-      'Email',
-      'Departemen',
-      'Jabatan',
-      'Status',
-      'Catatan',
-    ];
-
-    const csv = [
-      headers.map(escapeCsvCell).join(','),
-      ...rows.map((row) => headers.map((header) => escapeCsvCell(String(row[header as keyof typeof row]))).join(',')),
-    ].join('\n');
-
-    return new NextResponse(csv, {
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="absensi_${dateLabel}.csv"`,
-      },
-    });
+    return createExportResponse(attendances, format);
   } catch (error) {
     console.error('Export attendance error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    const { searchParams } = new URL(request.url);
+    const format = searchParams.get('format') === 'xlsx' ? 'xlsx' : 'csv';
+    const attendances = exportMockAttendances({
+      startDate: searchParams.get('startDate'),
+      endDate: searchParams.get('endDate'),
+      name: searchParams.get('name'),
+      employeeId: searchParams.get('employeeId'),
+      department: searchParams.get('department'),
+      status: searchParams.get('status'),
+    });
+    return createExportResponse(attendances, format);
   }
 }

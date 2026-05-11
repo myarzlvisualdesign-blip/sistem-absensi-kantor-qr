@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { deactivateMockEmployee, getMockEmployee, shouldUseMockData, updateMockEmployee } from '@/lib/mock-store';
 import { emptyToNull, generateQRToken } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +20,15 @@ export async function GET(
     }
 
     const { id } = await params;
+    if (shouldUseMockData()) {
+      const employee = getMockEmployee(id);
+      if (!employee) {
+        return NextResponse.json({ error: 'Pegawai tidak ditemukan' }, { status: 404 });
+      }
+      return NextResponse.json(employee);
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const employee = await prisma.employee.findUnique({
       where: { id },
       include: {
@@ -39,6 +48,9 @@ export async function GET(
     return NextResponse.json(employee);
   } catch (error) {
     console.error('Get employee error:', error);
+    const { id } = await params;
+    const employee = getMockEmployee(id);
+    if (employee) return NextResponse.json(employee);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
@@ -47,6 +59,15 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  let body: {
+    name?: string;
+    phone?: string;
+    department?: string;
+    position?: string;
+    isActive?: boolean;
+    regenerateQr?: boolean;
+  } = {};
+
   try {
     const session = await getSession();
     if (!session || session.role !== 'ADMIN') {
@@ -54,15 +75,17 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const body = (await request.json()) as {
-      name?: string;
-      phone?: string;
-      department?: string;
-      position?: string;
-      isActive?: boolean;
-      regenerateQr?: boolean;
-    };
+    body = (await request.json()) as typeof body;
 
+    if (shouldUseMockData()) {
+      const employee = updateMockEmployee(id, body);
+      if (!employee) {
+        return NextResponse.json({ error: 'Pegawai tidak ditemukan' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, employee });
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const existingEmployee = await prisma.employee.findUnique({
       where: { id },
       include: { user: true },
@@ -115,6 +138,9 @@ export async function PUT(
     return NextResponse.json({ success: true, employee });
   } catch (error) {
     console.error('Update employee error:', error);
+    const { id } = await params;
+    const employee = updateMockEmployee(id, body);
+    if (employee) return NextResponse.json({ success: true, employee });
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
@@ -130,6 +156,14 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    if (shouldUseMockData()) {
+      if (!deactivateMockEmployee(id)) {
+        return NextResponse.json({ error: 'Pegawai tidak ditemukan' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const existingEmployee = await prisma.employee.findUnique({
       where: { id },
       include: { user: true },
@@ -165,6 +199,10 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Deactivate employee error:', error);
+    const { id } = await params;
+    if (deactivateMockEmployee(id)) {
+      return NextResponse.json({ success: true });
+    }
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

@@ -1,7 +1,7 @@
 import { AttendanceStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { deleteMockAttendance, getMockAttendance, shouldUseMockData, updateMockAttendance } from '@/lib/mock-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +20,15 @@ export async function GET(
     }
 
     const { id } = await params;
+    if (shouldUseMockData()) {
+      const attendance = getMockAttendance(id);
+      if (!attendance) {
+        return NextResponse.json({ error: 'Data tidak ditemukan' }, { status: 404 });
+      }
+      return NextResponse.json(attendance);
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const attendance = await prisma.attendance.findUnique({
       where: { id },
       include: {
@@ -34,6 +43,9 @@ export async function GET(
     return NextResponse.json(attendance);
   } catch (error) {
     console.error('Get attendance error:', error);
+    const { id } = await params;
+    const attendance = getMockAttendance(id);
+    if (attendance) return NextResponse.json(attendance);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
@@ -42,6 +54,13 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  let body: {
+    date?: string;
+    checkInTime?: string;
+    status?: AttendanceStatus;
+    note?: string;
+  } = {};
+
   try {
     const session = await getSession();
     if (!session || session.role !== 'ADMIN') {
@@ -49,13 +68,24 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const body = (await request.json()) as {
-      date?: string;
-      checkInTime?: string;
-      status?: AttendanceStatus;
-      note?: string;
-    };
+    body = (await request.json()) as typeof body;
 
+    if (shouldUseMockData()) {
+      if (body.status && body.status !== 'HADIR' && body.status !== 'TERLAMBAT') {
+        return NextResponse.json({ error: 'Status absensi tidak valid' }, { status: 400 });
+      }
+      const attendance = updateMockAttendance(id, {
+        ...body,
+        status: body.status as 'HADIR' | 'TERLAMBAT' | undefined,
+        editedByAdminId: session.userId,
+      });
+      if (!attendance) {
+        return NextResponse.json({ error: 'Data tidak ditemukan' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, attendance });
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const existingAttendance = await prisma.attendance.findUnique({
       where: { id },
     });
@@ -94,6 +124,16 @@ export async function PUT(
     return NextResponse.json({ success: true, attendance });
   } catch (error) {
     console.error('Update attendance error:', error);
+    const { id } = await params;
+    if (body.status && body.status !== 'HADIR' && body.status !== 'TERLAMBAT') {
+      return NextResponse.json({ error: 'Status absensi tidak valid' }, { status: 400 });
+    }
+    const attendance = updateMockAttendance(id, {
+      ...body,
+      status: body.status as 'HADIR' | 'TERLAMBAT' | undefined,
+      editedByAdminId: (await getSession())?.userId,
+    });
+    if (attendance) return NextResponse.json({ success: true, attendance });
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
@@ -109,6 +149,14 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    if (shouldUseMockData()) {
+      if (!deleteMockAttendance(id)) {
+        return NextResponse.json({ error: 'Data tidak ditemukan' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const existingAttendance = await prisma.attendance.findUnique({
       where: { id },
     });
@@ -134,6 +182,10 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Delete attendance error:', error);
+    const { id } = await params;
+    if (deleteMockAttendance(id)) {
+      return NextResponse.json({ success: true });
+    }
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

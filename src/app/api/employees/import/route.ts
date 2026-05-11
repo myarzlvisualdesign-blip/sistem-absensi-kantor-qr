@@ -1,8 +1,8 @@
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import prisma from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { shouldUseMockData, upsertImportedMockEmployee } from '@/lib/mock-store';
 import { emptyToNull, generateEmployeeId, generateQRToken, normalizeEmail } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +26,7 @@ function normalizeRow(row: Record<string, unknown>): ImportRow {
 }
 
 async function createUniqueEmployeeId(): Promise<string> {
+  const { default: prisma } = await import('@/lib/db');
   for (let i = 0; i < 8; i++) {
     const employeeId = generateEmployeeId();
     const exists = await prisma.employee.findUnique({ where: { employeeId } });
@@ -35,6 +36,7 @@ async function createUniqueEmployeeId(): Promise<string> {
 }
 
 async function createUniqueQrToken(): Promise<string> {
+  const { default: prisma } = await import('@/lib/db');
   for (let i = 0; i < 8; i++) {
     const qrToken = generateQRToken();
     const exists = await prisma.employee.findUnique({ where: { qrToken } });
@@ -44,6 +46,8 @@ async function createUniqueQrToken(): Promise<string> {
 }
 
 export async function POST(request: Request) {
+  let rawRows: Record<string, unknown>[] = [];
+
   try {
     const session = await getSession();
     if (!session || session.role !== 'ADMIN') {
@@ -61,12 +65,56 @@ export async function POST(request: Request) {
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
+    rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
 
     if (rawRows.length === 0) {
       return NextResponse.json({ error: 'File tidak memiliki data' }, { status: 400 });
     }
 
+    if (shouldUseMockData()) {
+      const result = {
+        success: 0,
+        created: 0,
+        updated: 0,
+        failed: 0,
+        errors: [] as Array<{ row: number; error: string }>,
+      };
+
+      for (const [index, rawRow] of rawRows.entries()) {
+        const rowNumber = index + 2;
+        const row = normalizeRow(rawRow);
+        const name = row.name?.trim();
+        const email = row.email ? normalizeEmail(row.email) : '';
+
+        if (!name || !email) {
+          result.failed++;
+          result.errors.push({ row: rowNumber, error: 'Kolom name dan email wajib diisi' });
+          continue;
+        }
+
+        try {
+          const action = upsertImportedMockEmployee({
+            employeeId: row.employee_id?.trim(),
+            name,
+            email,
+            password: row.password?.trim() || 'user123',
+            phone: row.phone,
+            department: row.department,
+            position: row.position,
+          });
+          result.success++;
+          if (action === 'created') result.created++;
+          if (action === 'updated') result.updated++;
+        } catch {
+          result.failed++;
+          result.errors.push({ row: rowNumber, error: 'Terjadi kesalahan saat memproses baris' });
+        }
+      }
+
+      return NextResponse.json(result);
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const result = {
       success: 0,
       created: 0,
@@ -195,6 +243,48 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('Import employees error:', error);
+    if (rawRows.length > 0) {
+      const result = {
+        success: 0,
+        created: 0,
+        updated: 0,
+        failed: 0,
+        errors: [] as Array<{ row: number; error: string }>,
+      };
+
+      for (const [index, rawRow] of rawRows.entries()) {
+        const rowNumber = index + 2;
+        const row = normalizeRow(rawRow);
+        const name = row.name?.trim();
+        const email = row.email ? normalizeEmail(row.email) : '';
+
+        if (!name || !email) {
+          result.failed++;
+          result.errors.push({ row: rowNumber, error: 'Kolom name dan email wajib diisi' });
+          continue;
+        }
+
+        try {
+          const action = upsertImportedMockEmployee({
+            employeeId: row.employee_id?.trim(),
+            name,
+            email,
+            password: row.password?.trim() || 'user123',
+            phone: row.phone,
+            department: row.department,
+            position: row.position,
+          });
+          result.success++;
+          if (action === 'created') result.created++;
+          if (action === 'updated') result.updated++;
+        } catch {
+          result.failed++;
+          result.errors.push({ row: rowNumber, error: 'Terjadi kesalahan saat memproses baris' });
+        }
+      }
+
+      return NextResponse.json(result);
+    }
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

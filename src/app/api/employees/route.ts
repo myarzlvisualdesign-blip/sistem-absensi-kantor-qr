@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { createMockEmployee, listMockEmployees, shouldUseMockData } from '@/lib/mock-store';
 import { emptyToNull, generateEmployeeId, generateQRToken, normalizeEmail } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 async function createUniqueEmployeeId(proposed?: string): Promise<string> {
   if (proposed) return proposed.trim();
 
+  const { default: prisma } = await import('@/lib/db');
   for (let i = 0; i < 8; i++) {
     const value = generateEmployeeId();
     const exists = await prisma.employee.findUnique({ where: { employeeId: value } });
@@ -19,6 +20,7 @@ async function createUniqueEmployeeId(proposed?: string): Promise<string> {
 }
 
 async function createUniqueQrToken(): Promise<string> {
+  const { default: prisma } = await import('@/lib/db');
   for (let i = 0; i < 8; i++) {
     const value = generateQRToken();
     const exists = await prisma.employee.findUnique({ where: { qrToken: value } });
@@ -35,6 +37,11 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    if (shouldUseMockData()) {
+      return NextResponse.json(listMockEmployees());
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const employees = await prisma.employee.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -50,26 +57,28 @@ export async function GET() {
     return NextResponse.json(employees);
   } catch (error) {
     console.error('Get employees error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json(listMockEmployees());
   }
 }
 
 export async function POST(request: Request) {
+  let body: {
+    employeeId?: string;
+    name?: string;
+    email?: string;
+    password?: string;
+    phone?: string;
+    department?: string;
+    position?: string;
+  } = {};
+
   try {
     const session = await getSession();
     if (!session || session.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = (await request.json()) as {
-      employeeId?: string;
-      name?: string;
-      email?: string;
-      password?: string;
-      phone?: string;
-      department?: string;
-      position?: string;
-    };
+    body = (await request.json()) as typeof body;
 
     const name = body.name?.trim();
     const email = body.email ? normalizeEmail(body.email) : '';
@@ -83,6 +92,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password minimal 6 karakter' }, { status: 400 });
     }
 
+    if (shouldUseMockData()) {
+      try {
+        const employee = createMockEmployee({
+          employeeId: body.employeeId,
+          name,
+          email,
+          password,
+          phone: body.phone,
+          department: body.department,
+          position: body.position,
+        });
+        return NextResponse.json({ success: true, employee }, { status: 201 });
+      } catch (mockError) {
+        const message = mockError instanceof Error ? mockError.message : 'Server error';
+        return NextResponse.json({ error: message }, { status: 409 });
+      }
+    }
+
+    const { default: prisma } = await import('@/lib/db');
     const [existingUser, existingEmployeeEmail] = await Promise.all([
       prisma.user.findUnique({ where: { email } }),
       prisma.employee.findUnique({ where: { email } }),
@@ -146,6 +174,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, employee: result.employee }, { status: 201 });
   } catch (error) {
     console.error('Create employee error:', error);
+    if (body.name && body.email && body.password && body.password.trim().length >= 6) {
+      try {
+        const employee = createMockEmployee({
+          employeeId: body.employeeId,
+          name: body.name,
+          email: body.email,
+          password: body.password,
+          phone: body.phone,
+          department: body.department,
+          position: body.position,
+        });
+        return NextResponse.json({ success: true, employee }, { status: 201 });
+      } catch (mockError) {
+        const message = mockError instanceof Error ? mockError.message : 'Server error';
+        return NextResponse.json({ error: message }, { status: 409 });
+      }
+    }
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
