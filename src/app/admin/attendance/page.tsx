@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatEmployeeId } from '@/lib/utils';
 
 interface Attendance {
   id: string;
@@ -29,7 +29,6 @@ export default function AttendancePage() {
     endDate: '',
     name: '',
     employeeId: '',
-    department: '',
     status: '',
   });
   const [page, setPage] = useState(1);
@@ -125,7 +124,7 @@ export default function AttendancePage() {
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-md p-4 mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Tanggal Mulai</label>
             <input
@@ -155,22 +154,13 @@ export default function AttendancePage() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">NIP/ID</label>
+            <label className="block text-xs text-gray-500 mb-1">NIP Pegawai</label>
             <input
               type="text"
-              placeholder="EMP-..."
+              inputMode="numeric"
+              placeholder="Cari NIP..."
               value={filters.employeeId}
-              onChange={(e) => setFilters({ ...filters, employeeId: e.target.value })}
-              className="input-field text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Departemen</label>
-            <input
-              type="text"
-              placeholder="Departemen..."
-              value={filters.department}
-              onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+              onChange={(e) => setFilters({ ...filters, employeeId: e.target.value.replace(/\D/g, '') })}
               className="input-field text-sm"
             />
           </div>
@@ -188,7 +178,7 @@ export default function AttendancePage() {
           </div>
           <div className="flex items-end">
             <button
-              onClick={() => setFilters({ startDate: '', endDate: '', name: '', employeeId: '', department: '', status: '' })}
+              onClick={() => setFilters({ startDate: '', endDate: '', name: '', employeeId: '', status: '' })}
               className="btn-secondary text-sm"
             >
               Reset
@@ -215,8 +205,7 @@ export default function AttendancePage() {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tanggal</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dept</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">NIP</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jam</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
@@ -227,8 +216,7 @@ export default function AttendancePage() {
                     <tr key={attendance.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm">{formatDate(attendance.date)}</td>
                       <td className="px-6 py-4 text-sm font-medium">{attendance.employee.name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{attendance.employee.employeeId}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{attendance.employee.department || '-'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{formatEmployeeId(attendance.employee.employeeId)}</td>
                       <td className="px-6 py-4 text-sm">{new Date(attendance.checkInTime).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td>
                       <td className="px-6 py-4">
                         <span className={`badge ${attendance.status === 'HADIR' ? 'badge-success' : 'badge-danger'}`}>

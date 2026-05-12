@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { createD1ScanAttendance } from '@/lib/d1-store';
 import { createMockScanAttendance, shouldUseMockData } from '@/lib/mock-store';
 import { getTodayString, isLate } from '@/lib/utils';
 import { validateQRToken } from '@/lib/qr';
@@ -8,6 +9,8 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   let scannedToken = '';
+  let latitude: number | undefined;
+  let longitude: number | undefined;
 
   try {
     const session = await getSession();
@@ -15,9 +18,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    ({ scannedToken = '' } = (await request.json()) as { scannedToken?: string });
+    ({ scannedToken = '', latitude, longitude } = (await request.json()) as {
+      scannedToken?: string;
+      latitude?: number;
+      longitude?: number;
+    });
     if (!scannedToken || !validateQRToken(scannedToken)) {
       return NextResponse.json({ error: 'QR/barcode tidak valid' }, { status: 400 });
+    }
+
+    try {
+      const d1Attendance = await createD1ScanAttendance({
+        userId: session.userId,
+        employeeId: session.employeeId,
+      }, scannedToken, { latitude, longitude });
+
+      if (d1Attendance) {
+        return NextResponse.json({
+          success: true,
+          status: d1Attendance.status,
+          checkInTime: new Date(d1Attendance.checkInTime).toISOString(),
+          message: d1Attendance.status === 'TERLAMBAT'
+            ? 'Absen berhasil dengan status TERLAMBAT'
+            : 'Absen berhasil dengan status HADIR',
+        });
+      }
+    } catch (d1Error) {
+      const message = d1Error instanceof Error ? d1Error.message : 'Terjadi kesalahan server';
+      const status = message === 'Anda sudah absen hari ini' ? 409 : 400;
+      return NextResponse.json({ error: message }, { status });
     }
 
     if (shouldUseMockData()) {
@@ -25,7 +54,7 @@ export async function POST(request: Request) {
         const attendance = createMockScanAttendance({
           userId: session.userId,
           employeeId: session.employeeId,
-        }, scannedToken);
+        }, scannedToken, { latitude, longitude });
 
         return NextResponse.json({
           success: true,
@@ -108,7 +137,7 @@ export async function POST(request: Request) {
         const attendance = createMockScanAttendance({
           userId: session.userId,
           employeeId: session.employeeId,
-        }, scannedToken);
+        }, scannedToken, { latitude, longitude });
 
         return NextResponse.json({
           success: true,

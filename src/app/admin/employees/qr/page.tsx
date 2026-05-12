@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { formatEmployeeId } from '@/lib/utils';
 
 interface Employee {
   id: string;
   employeeId: string;
   name: string;
   email: string;
-  department: string | null;
   qrToken: string;
   qrImage?: string;
 }
@@ -59,8 +59,10 @@ export default function QRCodesPage() {
   const handleDownloadQR = (employee: Employee) => {
     if (!employee.qrImage) return;
 
+    const nip = formatEmployeeId(employee.employeeId);
+    const identifier = nip === '-' ? employee.id : nip;
     const link = document.createElement('a');
-    link.download = `QR_${employee.employeeId}_${employee.name.replace(/\s/g, '_')}.png`;
+    link.download = `QR_${identifier}_${employee.name.replace(/\s/g, '_')}.png`;
     link.href = employee.qrImage;
     link.click();
   };
@@ -78,7 +80,7 @@ export default function QRCodesPage() {
 
   const filteredEmployees = employees.filter((emp) =>
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.employeeId.toLowerCase().includes(searchTerm.toLowerCase())
+    formatEmployeeId(emp.employeeId).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -104,7 +106,7 @@ export default function QRCodesPage() {
       <div className="bg-white rounded-xl shadow-md p-4 mb-6">
         <input
           type="text"
-          placeholder="Cari nama atau ID pegawai..."
+          placeholder="Cari nama atau NIP pegawai..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="input-field"
@@ -140,8 +142,8 @@ export default function QRCodesPage() {
               </div>
               <div className="text-center">
                 <h3 className="font-semibold text-gray-900">{employee.name}</h3>
-                <p className="text-sm text-gray-500">{employee.employeeId}</p>
-                <p className="text-xs text-gray-400">{employee.department || '-'}</p>
+                <p className="text-sm text-gray-500">NIP: {formatEmployeeId(employee.employeeId)}</p>
+                <p className="text-xs text-gray-400">{employee.email}</p>
               </div>
               <button
                 onClick={() => handleDownloadQR(employee)}

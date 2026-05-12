@@ -57,10 +57,29 @@ export function isLate(checkInTime: Date, lateLimitTime: string, timeZone = DEFA
   return false;
 }
 
-export function generateEmployeeId(): string {
-  const year = new Date().getFullYear();
-  const random = crypto.randomInt(0, 10000).toString().padStart(4, '0');
-  return `EMP-${year}-${random}`;
+export const GENERATED_EMPLOYEE_ID_PREFIX = 'KONTRAK-';
+
+export function generateInternalEmployeeId(): string {
+  return `${GENERATED_EMPLOYEE_ID_PREFIX}${crypto.randomUUID()}`;
+}
+
+export function normalizeEmployeeId(value?: string | null): string {
+  return (value || '').trim();
+}
+
+export function isValidEmployeeId(value?: string | null): boolean {
+  const normalized = normalizeEmployeeId(value);
+  return !normalized || /^\d+$/.test(normalized);
+}
+
+export function isGeneratedEmployeeId(value?: string | null): boolean {
+  return Boolean(value?.startsWith(GENERATED_EMPLOYEE_ID_PREFIX));
+}
+
+export function formatEmployeeId(value?: string | null): string {
+  const normalized = normalizeEmployeeId(value);
+  if (!normalized || isGeneratedEmployeeId(normalized)) return '-';
+  return normalized;
 }
 
 export function generateQRToken(): string {

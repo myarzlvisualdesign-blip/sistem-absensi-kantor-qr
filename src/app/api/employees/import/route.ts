@@ -1,14 +1,18 @@
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { getSession } from '@/lib/auth';
+import { DEFAULT_USER_PASSWORD, createOfficeEmail, isAllowedEmailDomain } from '@/lib/app-config';
+import { csvRowsToObjects, parseCsvRows } from '@/lib/csv';
+import { getD1Database, upsertImportedD1Employee } from '@/lib/d1-store';
 import { shouldUseMockData, upsertImportedMockEmployee } from '@/lib/mock-store';
-import { emptyToNull, generateEmployeeId, generateQRToken, normalizeEmail } from '@/lib/utils';
+import { emptyToNull, generateInternalEmployeeId, generateQRToken, isValidEmployeeId, normalizeEmail, normalizeEmployeeId } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
 type ImportRow = {
   employee_id?: string;
+  nip?: string;
   name?: string;
   email?: string;
   password?: string;
@@ -25,10 +29,74 @@ function normalizeRow(row: Record<string, unknown>): ImportRow {
   return normalized;
 }
 
+function getRowEmployeeId(row: ImportRow): string {
+  return normalizeEmployeeId(row.nip || row.employee_id);
+}
+
+function cellValueToString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value !== 'object') return String(value);
+
+  const objectValue = value as Record<string, unknown>;
+  if (typeof objectValue.text === 'string') return objectValue.text;
+  if (objectValue.result !== undefined) return cellValueToString(objectValue.result);
+  if (Array.isArray(objectValue.richText)) {
+    return objectValue.richText
+      .map((part) => {
+        if (part && typeof part === 'object' && 'text' in part) {
+          return String((part as Record<string, unknown>).text || '');
+        }
+        return '';
+      })
+      .join('');
+  }
+
+  return String(value);
+}
+
+async function parseImportRows(file: File): Promise<Record<string, unknown>[]> {
+  const arrayBuffer = await file.arrayBuffer();
+  const fileName = file.name.toLowerCase();
+
+  if (fileName.endsWith('.csv') || file.type === 'text/csv') {
+    const text = new TextDecoder('utf-8').decode(arrayBuffer);
+    return csvRowsToObjects(parseCsvRows(text));
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(arrayBuffer);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return [];
+
+  const headerRow = worksheet.getRow(1);
+  const headers: string[] = [];
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber - 1] = cellValueToString(cell.value).trim();
+  });
+
+  const rows: Record<string, unknown>[] = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+
+    const item: Record<string, string> = {};
+    let hasValue = false;
+    headers.forEach((header, index) => {
+      if (!header) return;
+      const value = cellValueToString(row.getCell(index + 1).value).trim();
+      item[header] = value;
+      if (value) hasValue = true;
+    });
+    if (hasValue) rows.push(item);
+  });
+
+  return rows;
+}
+
 async function createUniqueEmployeeId(): Promise<string> {
   const { default: prisma } = await import('@/lib/db');
   for (let i = 0; i < 8; i++) {
-    const employeeId = generateEmployeeId();
+    const employeeId = generateInternalEmployeeId();
     const exists = await prisma.employee.findUnique({ where: { employeeId } });
     if (!exists) return employeeId;
   }
@@ -61,17 +129,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'File diperlukan' }, { status: 400 });
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
+    rawRows = await parseImportRows(file);
 
     if (rawRows.length === 0) {
       return NextResponse.json({ error: 'File tidak memiliki data' }, { status: 400 });
     }
 
-    if (shouldUseMockData()) {
+    const useD1 = Boolean(await getD1Database());
+    if (useD1 || shouldUseMockData()) {
       const result = {
         success: 0,
         created: 0,
@@ -84,20 +149,42 @@ export async function POST(request: Request) {
         const rowNumber = index + 2;
         const row = normalizeRow(rawRow);
         const name = row.name?.trim();
-        const email = row.email ? normalizeEmail(row.email) : '';
+        const email = row.email ? normalizeEmail(row.email) : (name ? createOfficeEmail(name) : '');
+        const employeeId = getRowEmployeeId(row);
 
-        if (!name || !email) {
+        if (!name) {
           result.failed++;
-          result.errors.push({ row: rowNumber, error: 'Kolom name dan email wajib diisi' });
+          result.errors.push({ row: rowNumber, error: 'Kolom name wajib diisi' });
+          continue;
+        }
+
+        if (!isValidEmployeeId(employeeId)) {
+          result.failed++;
+          result.errors.push({ row: rowNumber, error: 'Kolom NIP hanya boleh angka atau dikosongkan' });
+          continue;
+        }
+
+        if (!isAllowedEmailDomain(email)) {
+          result.failed++;
+          result.errors.push({ row: rowNumber, error: 'Email wajib memakai domain @gmail.com' });
           continue;
         }
 
         try {
-          const action = upsertImportedMockEmployee({
-            employeeId: row.employee_id?.trim(),
+          const d1Action = await upsertImportedD1Employee({
+            employeeId,
             name,
             email,
-            password: row.password?.trim() || 'user123',
+            password: row.password?.trim() || DEFAULT_USER_PASSWORD,
+            phone: row.phone,
+            department: row.department,
+            position: row.position,
+          });
+          const action = d1Action || upsertImportedMockEmployee({
+            employeeId,
+            name,
+            email,
+            password: row.password?.trim() || DEFAULT_USER_PASSWORD,
             phone: row.phone,
             department: row.department,
             position: row.position,
@@ -127,13 +214,26 @@ export async function POST(request: Request) {
       const rowNumber = index + 2;
       const row = normalizeRow(rawRow);
       const name = row.name?.trim();
-      const email = row.email ? normalizeEmail(row.email) : '';
-      const employeeId = row.employee_id?.trim() || await createUniqueEmployeeId();
-      const password = row.password?.trim() || 'user123';
+      const email = row.email ? normalizeEmail(row.email) : (name ? createOfficeEmail(name) : '');
+      const rowEmployeeId = getRowEmployeeId(row);
+      const employeeId = rowEmployeeId || await createUniqueEmployeeId();
+      const password = row.password?.trim() || DEFAULT_USER_PASSWORD;
 
-      if (!name || !email) {
+      if (!name) {
         result.failed++;
-        result.errors.push({ row: rowNumber, error: 'Kolom name dan email wajib diisi' });
+        result.errors.push({ row: rowNumber, error: 'Kolom name wajib diisi' });
+        continue;
+      }
+
+      if (!isValidEmployeeId(rowEmployeeId)) {
+        result.failed++;
+        result.errors.push({ row: rowNumber, error: 'Kolom NIP hanya boleh angka atau dikosongkan' });
+        continue;
+      }
+
+      if (!isAllowedEmailDomain(email)) {
+        result.failed++;
+        result.errors.push({ row: rowNumber, error: 'Email wajib memakai domain @gmail.com' });
         continue;
       }
 
@@ -256,7 +356,8 @@ export async function POST(request: Request) {
         const rowNumber = index + 2;
         const row = normalizeRow(rawRow);
         const name = row.name?.trim();
-        const email = row.email ? normalizeEmail(row.email) : '';
+        const email = row.email ? normalizeEmail(row.email) : (name ? createOfficeEmail(name) : '');
+        const employeeId = getRowEmployeeId(row);
 
         if (!name || !email) {
           result.failed++;
@@ -264,12 +365,24 @@ export async function POST(request: Request) {
           continue;
         }
 
+        if (!isValidEmployeeId(employeeId)) {
+          result.failed++;
+          result.errors.push({ row: rowNumber, error: 'Kolom NIP hanya boleh angka atau dikosongkan' });
+          continue;
+        }
+
+        if (!isAllowedEmailDomain(email)) {
+          result.failed++;
+          result.errors.push({ row: rowNumber, error: 'Email wajib memakai domain @gmail.com' });
+          continue;
+        }
+
         try {
           const action = upsertImportedMockEmployee({
-            employeeId: row.employee_id?.trim(),
+            employeeId,
             name,
             email,
-            password: row.password?.trim() || 'user123',
+            password: row.password?.trim() || DEFAULT_USER_PASSWORD,
             phone: row.phone,
             department: row.department,
             position: row.position,

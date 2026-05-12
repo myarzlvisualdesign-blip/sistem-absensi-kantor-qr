@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { APP_ORGANIZATION } from '@/lib/app-config';
+import { getD1Settings, updateD1Settings } from '@/lib/d1-store';
 import { getMockSettings, shouldUseMockData, updateMockSettings } from '@/lib/mock-store';
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +17,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const d1Settings = await getD1Settings();
+    if (d1Settings) return NextResponse.json(d1Settings);
+
     if (shouldUseMockData()) {
       return NextResponse.json(getMockSettings());
     }
@@ -27,7 +32,7 @@ export async function GET() {
         data: {
           workStartTime: '08:00',
           lateLimitTime: '08:15',
-          companyName: 'PT. Contoh Indonesia',
+          companyName: APP_ORGANIZATION,
         },
       });
     }
@@ -51,6 +56,9 @@ export async function PUT(request: Request) {
     body = await request.json() as typeof body;
     const { workStartTime, lateLimitTime, companyName } = body;
 
+    const d1Settings = await updateD1Settings(body);
+    if (d1Settings) return NextResponse.json(d1Settings);
+
     if (shouldUseMockData()) {
       return NextResponse.json(updateMockSettings(body));
     }
@@ -64,7 +72,7 @@ export async function PUT(request: Request) {
         data: {
           workStartTime: workStartTime || '08:00',
           lateLimitTime: lateLimitTime || '08:15',
-          companyName: companyName || 'PT. Contoh Indonesia',
+          companyName: companyName || APP_ORGANIZATION,
         },
       });
     } else {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { formatEmployeeId } from '@/lib/utils';
 
 interface Employee {
   id: string;
@@ -10,7 +11,6 @@ interface Employee {
   name: string;
   email: string;
   phone: string | null;
-  department: string | null;
   position: string | null;
   isActive: boolean;
   user: {
@@ -42,8 +42,8 @@ export default function EmployeesPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Nonaktifkan pegawai ini? Akun login pegawai juga akan dinonaktifkan.')) return;
+  const handleDeactivate = async (id: string) => {
+    if (!confirm('Nonaktifkan pegawai ini? Data pegawai dan riwayat absensi tetap disimpan.')) return;
 
     try {
       const res = await fetch(`/api/employees/${id}`, {
@@ -56,6 +56,26 @@ export default function EmployeesPage() {
       } else {
         const data: { error?: string } = await res.json();
         toast.error(data.error || 'Gagal menonaktifkan pegawai');
+      }
+    } catch (error) {
+      toast.error('Terjadi kesalahan');
+    }
+  };
+
+  const handleDeleteInactive = async (id: string) => {
+    if (!confirm('Hapus permanen pegawai nonaktif ini? Data pegawai, akun login, dan riwayat absensinya akan dihapus.')) return;
+
+    try {
+      const res = await fetch(`/api/employees/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        toast.success('Pegawai nonaktif berhasil dihapus');
+        fetchEmployees();
+      } else {
+        const data: { error?: string } = await res.json();
+        toast.error(data.error || 'Gagal menghapus pegawai');
       }
     } catch (error) {
       toast.error('Terjadi kesalahan');
@@ -99,7 +119,7 @@ export default function EmployeesPage() {
           <div className="flex-1">
             <input
               type="text"
-              placeholder="Cari nama, ID, atau email..."
+              placeholder="Cari nama, NIP, atau email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="input-field"
@@ -133,16 +153,13 @@ export default function EmployeesPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    ID Pegawai
+                    NIP Pegawai
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Nama
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Departemen
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
@@ -156,16 +173,13 @@ export default function EmployeesPage() {
                 {filteredEmployees.map((employee) => (
                   <tr key={employee.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {employee.employeeId}
+                      {formatEmployeeId(employee.employeeId)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {employee.name}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {employee.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {employee.department || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`badge ${employee.isActive ? 'badge-success' : 'badge-danger'}`}>
@@ -179,12 +193,21 @@ export default function EmployeesPage() {
                       >
                         Edit
                       </Link>
-                      <button
-                        onClick={() => handleDelete(employee.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Nonaktifkan
-                      </button>
+                      {employee.isActive ? (
+                        <button
+                          onClick={() => handleDeactivate(employee.id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Nonaktifkan
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleDeleteInactive(employee.id)}
+                          className="text-red-700 hover:text-red-950"
+                        >
+                          Hapus
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

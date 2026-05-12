@@ -1,0 +1,26 @@
+# Cloudflare Pages Configuration
+# Auto-deployment set up with GitHub integration
+
+name = "sistem-absensi-kantor-qr"
+compatibility_date = "2024-01-01"
+
+# Build configuration for Next.js
+[build]
+command = "npm run build"
+cwd = "."
+watch_dir = "."
+
+# Environment variables (configure in Cloudflare Dashboard)
+[vars]
+NODE_ENV = "production"
+
+# Build output directory (will be set by opennextjs-cloudflare)
+# pages_build_output_dir = ".open-next"
+
+# Production environment
+[env.production]
+name = "sistem-absensi-kantor-qr"
+
+# Preview environments (for pull requests)
+[env.preview]
+name = "sistem-absensi-kantor-qr-preview"

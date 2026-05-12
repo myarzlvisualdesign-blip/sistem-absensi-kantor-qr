@@ -9,7 +9,6 @@ export default function ReportsPage() {
     endDate: '',
     name: '',
     employeeId: '',
-    department: '',
     status: '',
   });
 
@@ -80,23 +79,14 @@ export default function ReportsPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">NIP/Employee ID</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">NIP Pegawai</label>
             <input
               type="text"
+              inputMode="numeric"
               value={filters.employeeId}
-              onChange={(event) => setFilters({ ...filters, employeeId: event.target.value })}
+              onChange={(event) => setFilters({ ...filters, employeeId: event.target.value.replace(/\D/g, '') })}
               className="input-field"
-              placeholder="EMP-2026-0001"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Departemen</label>
-            <input
-              type="text"
-              value={filters.department}
-              onChange={(event) => setFilters({ ...filters, department: event.target.value })}
-              className="input-field"
-              placeholder="IT, HRD, Marketing"
+              placeholder="Cari NIP"
             />
           </div>
           <div>
@@ -130,7 +120,7 @@ export default function ReportsPage() {
           </button>
           <button
             type="button"
-            onClick={() => setFilters({ startDate: '', endDate: '', name: '', employeeId: '', department: '', status: '' })}
+            onClick={() => setFilters({ startDate: '', endDate: '', name: '', employeeId: '', status: '' })}
             className="btn-secondary"
           >
             Reset Filter

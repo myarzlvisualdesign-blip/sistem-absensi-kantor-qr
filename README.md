@@ -44,7 +44,7 @@ DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public"
 NEXTAUTH_SECRET="minimum-32-karakter"
 NEXTAUTH_URL="http://localhost:3000"
 JWT_SECRET="minimum-32-karakter"
-ADMIN_EMAIL="admin@example.com"
+ADMIN_EMAIL="admin.lapas@gmail.com"
 ADMIN_PASSWORD="admin123"
 APP_TIMEZONE="Asia/Jakarta"
 ```
@@ -69,22 +69,22 @@ Buka `http://localhost:3000`.
 
 | Role | Email | Password |
 | --- | --- | --- |
-| Admin | `admin@example.com` | `admin123` |
-| User | `user1@example.com` | `user123` |
-| User | `user2@example.com` | `user123` |
-| User | `user3@example.com` | `user123` |
+| Admin | `admin.lapas@gmail.com` | `admin123` |
+| User | `budi.santoso@gmail.com` | `user123` |
+| User | `siti.rahayu@gmail.com` | `user123` |
+| User | `andi.wijaya@gmail.com` | `user123` |
 
 ## Format Import Pegawai
 
 CSV/XLSX harus memiliki header:
 
 ```csv
-employee_id,name,email,password,department,position,phone
-EMP-2026-0004,Dewi Lestari,dewi@example.com,user123,Finance,Staff,081234567893
-EMP-2026-0005,Rizky Pratama,rizky@example.com,,IT,Engineer,081234567894
+nip,name,email,password,position,phone
+123456789,Dewi Lestari,dewi.lestari@gmail.com,user123,Staff,081234567893
+,Pegawai Kontrak,pegawai.kontrak@gmail.com,,Staff,081234567894
 ```
 
-Kolom `name` dan `email` wajib. Jika `password` kosong, sistem memakai password default `user123`. Jika `employee_id` sudah ada, data pegawai diperbarui. Jika email sudah digunakan pegawai lain, baris akan ditolak.
+Kolom `name` dan `email` wajib. Email harus memakai domain `@gmail.com`. Kolom `nip` boleh kosong untuk pegawai kontrak, tetapi jika diisi hanya boleh angka. Jika `password` kosong, sistem memakai password default `user123`. Jika `nip` sudah ada, data pegawai diperbarui. Jika email sudah digunakan pegawai lain, baris akan ditolak.
 
 ## Route Penting
 

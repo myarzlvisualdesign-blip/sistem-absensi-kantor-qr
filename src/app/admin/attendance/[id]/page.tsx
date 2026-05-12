@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { formatEmployeeId } from '@/lib/utils';
 
 interface Attendance {
   id: string;
@@ -120,16 +121,12 @@ export default function EditAttendancePage() {
               <p className="font-medium">{attendance.employee.name}</p>
             </div>
             <div>
-              <p className="text-gray-500">Employee ID</p>
-              <p className="font-medium">{attendance.employee.employeeId}</p>
+              <p className="text-gray-500">NIP Pegawai</p>
+              <p className="font-medium">{formatEmployeeId(attendance.employee.employeeId)}</p>
             </div>
             <div>
               <p className="text-gray-500">Email</p>
               <p className="font-medium">{attendance.employee.email}</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Departemen</p>
-              <p className="font-medium">{attendance.employee.department || '-'}</p>
             </div>
           </div>
         </div>

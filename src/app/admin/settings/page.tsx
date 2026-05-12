@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import { APP_ORGANIZATION, OFFICE_LOCATION } from '@/lib/app-config';
 
 interface Settings {
   id: string;
@@ -96,7 +97,7 @@ export default function SettingsPage() {
               value={formData.companyName}
               onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
               className="input-field"
-              placeholder="PT. Contoh Indonesia"
+              placeholder={APP_ORGANIZATION}
             />
           </div>
 
@@ -137,6 +138,7 @@ export default function SettingsPage() {
             <ul className="text-sm text-yellow-700 space-y-1">
               <li>• Absen sebelum atau tepat {formData.lateLimitTime} = <span className="font-medium">HADIR</span></li>
               <li>• Absen setelah {formData.lateLimitTime} = <span className="font-medium">TERLAMBAT</span></li>
+              <li>• Validasi lokasi aktif radius {OFFICE_LOCATION.radiusMeters} meter dari office Lapas</li>
             </ul>
           </div>
 

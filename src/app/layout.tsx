@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { Toaster } from 'react-hot-toast';
+import { APP_FULL_NAME } from '@/lib/app-config';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Sistem Absensi Kantor QR',
-  description: 'Sistem absensi kantor dengan QR Code untuk pegawai dan admin',
+  title: APP_FULL_NAME,
+  description: 'Sistem absensi office Lapas Pemuda Kelas IIA Madiun berbasis QR dan validasi lokasi.',
 };
 
 export default function RootLayout({

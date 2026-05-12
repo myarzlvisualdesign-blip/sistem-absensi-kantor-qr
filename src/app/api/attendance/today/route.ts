@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { getD1TodayAttendance } from '@/lib/d1-store';
 import { getMockTodayAttendance, shouldUseMockData } from '@/lib/mock-store';
 import { getTodayString } from '@/lib/utils';
 
@@ -13,6 +14,15 @@ export async function GET() {
     }
 
     const today = getTodayString();
+    const d1Attendance = await getD1TodayAttendance(session.employeeId);
+    if (d1Attendance) {
+      return NextResponse.json({
+        status: d1Attendance.status,
+        checkInTime: new Date(d1Attendance.checkInTime).toISOString(),
+        attendanceId: d1Attendance.id,
+      });
+    }
+
     if (shouldUseMockData()) {
       const attendance = getMockTodayAttendance(session.employeeId);
       if (!attendance) {

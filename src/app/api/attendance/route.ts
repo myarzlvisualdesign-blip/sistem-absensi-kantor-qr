@@ -1,6 +1,7 @@
 import { AttendanceStatus, Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { listD1Attendances } from '@/lib/d1-store';
 import { listMockAttendances, shouldUseMockData } from '@/lib/mock-store';
 
 export const dynamic = 'force-dynamic';
@@ -49,6 +50,16 @@ export async function GET(request: Request) {
     const limit = 20;
     const skip = (Math.max(page, 1) - 1) * limit;
     const where = buildAttendanceWhere(searchParams);
+
+    const d1Attendances = await listD1Attendances({
+      startDate: searchParams.get('startDate'),
+      endDate: searchParams.get('endDate'),
+      name: searchParams.get('name'),
+      employeeId: searchParams.get('employeeId'),
+      department: searchParams.get('department'),
+      status: searchParams.get('status'),
+    }, page, limit);
+    if (d1Attendances) return NextResponse.json(d1Attendances);
 
     if (shouldUseMockData()) {
       return NextResponse.json(listMockAttendances({

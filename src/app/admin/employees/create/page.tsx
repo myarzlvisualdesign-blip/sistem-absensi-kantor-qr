@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { OFFICE_EMAIL_DOMAIN, createOfficeEmail } from '@/lib/app-config';
 
 export default function CreateEmployeePage() {
   const [formData, setFormData] = useState({
@@ -11,12 +12,12 @@ export default function CreateEmployeePage() {
     name: '',
     email: '',
     phone: '',
-    department: '',
     position: '',
     password: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const suggestedEmail = formData.name ? createOfficeEmail(formData.name) : `nama@${OFFICE_EMAIL_DOMAIN}`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,15 +59,20 @@ export default function CreateEmployeePage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Employee ID / NIP
+              NIP Pegawai
             </label>
             <input
               type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={formData.employeeId}
-              onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, employeeId: e.target.value.replace(/\D/g, '') })}
               className="input-field"
-              placeholder="Kosongkan untuk generate otomatis"
+              placeholder="Opsional, isi NIP jika ada"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Boleh dikosongkan untuk pegawai kontrak yang belum memiliki NIP.
+            </p>
           </div>
 
           <div>
@@ -85,62 +91,48 @@ export default function CreateEmployeePage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email *
+              Email Gmail
             </label>
             <input
               type="email"
-              required
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="input-field"
-              placeholder="email@contoh.com"
+              placeholder={suggestedEmail}
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Kosongkan untuk auto-generate Gmail: {suggestedEmail}
+            </p>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password *
+              Password Default
             </label>
             <input
               type="password"
-              required
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               className="input-field"
-              placeholder="Minimal 6 karakter"
+              placeholder="Opsional"
               minLength={6}
             />
             <p className="text-xs text-gray-500 mt-1">
-              Password akan di-hash sebelum disimpan
+              Kosongkan untuk memakai password default sistem. Pegawai bisa mengganti password dari dashboard masing-masing.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                No. Telepon
-              </label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="input-field"
-                placeholder="08xxxxxxxxxx"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Departemen
-              </label>
-              <input
-                type="text"
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                className="input-field"
-                placeholder="IT, HRD, Marketing, dll"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              No. Telepon
+            </label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="input-field"
+              placeholder="08xxxxxxxxxx"
+            />
           </div>
 
           <div>

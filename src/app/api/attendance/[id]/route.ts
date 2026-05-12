@@ -1,6 +1,7 @@
 import { AttendanceStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { deleteD1Attendance, getD1Attendance, updateD1Attendance } from '@/lib/d1-store';
 import { deleteMockAttendance, getMockAttendance, shouldUseMockData, updateMockAttendance } from '@/lib/mock-store';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,9 @@ export async function GET(
     }
 
     const { id } = await params;
+    const d1Attendance = await getD1Attendance(id);
+    if (d1Attendance) return NextResponse.json(d1Attendance);
+
     if (shouldUseMockData()) {
       const attendance = getMockAttendance(id);
       if (!attendance) {
@@ -69,6 +73,13 @@ export async function PUT(
 
     const { id } = await params;
     body = (await request.json()) as typeof body;
+
+    const d1Attendance = await updateD1Attendance(id, {
+      ...body,
+      status: body.status as 'HADIR' | 'TERLAMBAT' | undefined,
+      editedByAdminId: session.userId,
+    });
+    if (d1Attendance) return NextResponse.json({ success: true, attendance: d1Attendance });
 
     if (shouldUseMockData()) {
       if (body.status && body.status !== 'HADIR' && body.status !== 'TERLAMBAT') {
@@ -149,6 +160,9 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    const d1Deleted = await deleteD1Attendance(id);
+    if (d1Deleted) return NextResponse.json({ success: true });
+
     if (shouldUseMockData()) {
       if (!deleteMockAttendance(id)) {
         return NextResponse.json({ error: 'Data tidak ditemukan' }, { status: 404 });

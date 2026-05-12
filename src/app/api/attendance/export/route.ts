@@ -1,8 +1,10 @@
 import { AttendanceStatus, Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { getSession } from '@/lib/auth';
+import { exportD1Attendances } from '@/lib/d1-store';
 import { exportMockAttendances, MockAttendance, shouldUseMockData } from '@/lib/mock-store';
+import { formatEmployeeId } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +43,7 @@ function escapeCsvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-function createExportResponse(attendances: Array<MockAttendance | {
+async function createExportResponse(attendances: Array<MockAttendance | {
   date: string;
   checkInTime: Date | string;
   status: string;
@@ -62,21 +64,36 @@ function createExportResponse(attendances: Array<MockAttendance | {
       second: '2-digit',
     }),
     'Nama Pegawai': attendance.employee?.name || '',
-    'Employee ID / NIP': attendance.employee?.employeeId || '',
+    'NIP Pegawai': formatEmployeeId(attendance.employee?.employeeId),
     Email: attendance.employee?.email || '',
-    Departemen: attendance.employee?.department || '',
     Jabatan: attendance.employee?.position || '',
     Status: attendance.status,
     Catatan: attendance.note || '',
   }));
 
   const dateLabel = new Date().toISOString().split('T')[0];
+  const headers = [
+    'Tanggal',
+    'Jam Absen',
+    'Nama Pegawai',
+    'NIP Pegawai',
+    'Email',
+    'Jabatan',
+    'Status',
+    'Catatan',
+  ];
 
   if (format === 'xlsx') {
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Absensi');
-    const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Absensi');
+    worksheet.columns = headers.map((header) => ({
+      header,
+      key: header,
+      width: Math.max(header.length + 4, 16),
+    }));
+    rows.forEach((row) => worksheet.addRow(row));
+    worksheet.getRow(1).font = { bold: true };
+    const data = await workbook.xlsx.writeBuffer();
 
     return new NextResponse(data, {
       headers: {
@@ -85,18 +102,6 @@ function createExportResponse(attendances: Array<MockAttendance | {
       },
     });
   }
-
-  const headers = [
-    'Tanggal',
-    'Jam Absen',
-    'Nama Pegawai',
-    'Employee ID / NIP',
-    'Email',
-    'Departemen',
-    'Jabatan',
-    'Status',
-    'Catatan',
-  ];
 
   const csv = [
     headers.map(escapeCsvCell).join(','),
@@ -122,6 +127,16 @@ export async function GET(request: Request) {
     const format = searchParams.get('format') === 'xlsx' ? 'xlsx' : 'csv';
     const where = buildAttendanceWhere(searchParams);
 
+    const d1Attendances = await exportD1Attendances({
+      startDate: searchParams.get('startDate'),
+      endDate: searchParams.get('endDate'),
+      name: searchParams.get('name'),
+      employeeId: searchParams.get('employeeId'),
+      department: searchParams.get('department'),
+      status: searchParams.get('status'),
+    });
+    if (d1Attendances) return await createExportResponse(d1Attendances, format);
+
     if (shouldUseMockData()) {
       const attendances = exportMockAttendances({
         startDate: searchParams.get('startDate'),
@@ -131,7 +146,7 @@ export async function GET(request: Request) {
         department: searchParams.get('department'),
         status: searchParams.get('status'),
       });
-      return createExportResponse(attendances, format);
+      return await createExportResponse(attendances, format);
     }
 
     const { default: prisma } = await import('@/lib/db');
@@ -143,7 +158,7 @@ export async function GET(request: Request) {
       },
     });
 
-    return createExportResponse(attendances, format);
+    return await createExportResponse(attendances, format);
   } catch (error) {
     console.error('Export attendance error:', error);
     const { searchParams } = new URL(request.url);
@@ -156,6 +171,6 @@ export async function GET(request: Request) {
       department: searchParams.get('department'),
       status: searchParams.get('status'),
     });
-    return createExportResponse(attendances, format);
+    return await createExportResponse(attendances, format);
   }
 }

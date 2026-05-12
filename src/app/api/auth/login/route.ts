@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { createToken } from '@/lib/auth';
+import { findD1UserByCredentials } from '@/lib/d1-store';
 import { findMockUserByCredentials, shouldUseMockData } from '@/lib/mock-store';
 import { normalizeEmail } from '@/lib/utils';
 
@@ -77,6 +78,11 @@ export async function POST(request: Request) {
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email dan password diperlukan' }, { status: 400 });
+    }
+
+    const d1User = await findD1UserByCredentials(email, password);
+    if (d1User) {
+      return createLoginResponse(d1User);
     }
 
     if (shouldUseMockData()) {

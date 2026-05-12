@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { formatEmployeeId } from '@/lib/utils';
 
 interface Employee {
   id: string;
@@ -11,7 +12,6 @@ interface Employee {
   name: string;
   email: string;
   phone: string | null;
-  department: string | null;
   position: string | null;
   qrToken: string;
   isActive: boolean;
@@ -28,9 +28,10 @@ export default function EditEmployeePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
+    employeeId: '',
     name: '',
+    email: '',
     phone: '',
-    department: '',
     position: '',
     isActive: true,
     regenerateQr: false,
@@ -50,9 +51,10 @@ export default function EditEmployeePage() {
         const data: Employee = await res.json();
         setEmployee(data);
         setFormData({
+          employeeId: formatEmployeeId(data.employeeId) === '-' ? '' : data.employeeId,
           name: data.name,
+          email: data.email,
           phone: data.phone || '',
-          department: data.department || '',
           position: data.position || '',
           isActive: data.isActive,
           regenerateQr: false,
@@ -120,8 +122,9 @@ export default function EditEmployeePage() {
   const handleDownloadQR = () => {
     if (!qrImage || !employee) return;
 
+    const nip = formatEmployeeId(employee.employeeId);
     const link = document.createElement('a');
-    link.download = `QR_${employee.employeeId}.png`;
+    link.download = `QR_${nip === '-' ? employee.id : nip}.png`;
     link.href = qrImage;
     link.click();
   };
@@ -145,7 +148,7 @@ export default function EditEmployeePage() {
           &larr; Kembali ke Daftar Pegawai
         </Link>
         <h1 className="text-2xl font-bold text-gray-900">Edit Pegawai</h1>
-        <p className="text-gray-500">ID: {employee.employeeId}</p>
+        <p className="text-gray-500">NIP: {formatEmployeeId(employee.employeeId)}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -153,6 +156,24 @@ export default function EditEmployeePage() {
         <div className="lg:col-span-2">
           <div className="bg-white rounded-xl shadow-md p-6">
             <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  NIP Pegawai
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={formData.employeeId}
+                  onChange={(e) => setFormData({ ...formData, employeeId: e.target.value.replace(/\D/g, '') })}
+                  className="input-field"
+                  placeholder="Opsional, isi NIP jika ada"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Boleh dikosongkan untuk pegawai kontrak yang belum memiliki NIP.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -173,38 +194,25 @@ export default function EditEmployeePage() {
                   </label>
                   <input
                     type="email"
-                    value={employee.email}
-                    className="input-field bg-gray-100"
-                    disabled
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="input-field"
+                    placeholder="nama@gmail.com"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Email tidak bisa diubah</p>
+                  <p className="text-xs text-gray-500 mt-1">Email wajib memakai domain @gmail.com</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    No. Telepon
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="input-field"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Departemen
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                    className="input-field"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  No. Telepon
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="input-field"
+                />
               </div>
 
               <div>

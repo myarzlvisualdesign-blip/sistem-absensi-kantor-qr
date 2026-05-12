@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import { emptyToNull, generateEmployeeId, generateQRToken, getTodayString, isLate, normalizeEmail } from './utils';
+import { APP_ORGANIZATION, DEFAULT_USER_PASSWORD, createOfficeEmail, validateOfficeDistance } from './app-config';
+import { emptyToNull, generateInternalEmployeeId, generateQRToken, getTodayString, isLate, normalizeEmail, normalizeEmployeeId } from './utils';
 
 export type MockRole = 'ADMIN' | 'USER';
 export type MockAttendanceStatus = 'HADIR' | 'TERLAMBAT';
@@ -44,6 +45,9 @@ export interface MockAttendance {
   note: string | null;
   editedByAdminId?: string | null;
   editedAt?: Date | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  distanceMeters?: number | null;
   createdAt: Date;
   updatedAt: Date;
   employee?: MockEmployee;
@@ -111,8 +115,8 @@ function createInitialStore(): MockStore {
   const users: MockUser[] = [
     {
       id: 'user-admin',
-      name: 'Admin Kantor',
-      email: 'admin@example.com',
+      name: 'Admin Lapas',
+      email: createOfficeEmail('Admin Lapas'),
       password: 'admin123',
       role: 'ADMIN',
       isActive: true,
@@ -120,24 +124,24 @@ function createInitialStore(): MockStore {
     {
       id: 'user-1',
       name: 'Budi Santoso',
-      email: 'user1@example.com',
-      password: 'user123',
+      email: createOfficeEmail('Budi Santoso'),
+      password: DEFAULT_USER_PASSWORD,
       role: 'USER',
       isActive: true,
     },
     {
       id: 'user-2',
       name: 'Siti Rahayu',
-      email: 'user2@example.com',
-      password: 'user123',
+      email: createOfficeEmail('Siti Rahayu'),
+      password: DEFAULT_USER_PASSWORD,
       role: 'USER',
       isActive: true,
     },
     {
       id: 'user-3',
       name: 'Andi Wijaya',
-      email: 'user3@example.com',
-      password: 'user123',
+      email: createOfficeEmail('Andi Wijaya'),
+      password: DEFAULT_USER_PASSWORD,
       role: 'USER',
       isActive: true,
     },
@@ -147,12 +151,12 @@ function createInitialStore(): MockStore {
     {
       id: 'employee-1',
       userId: 'user-1',
-      employeeId: 'EMP-2026-0001',
+      employeeId: '0001',
       name: 'Budi Santoso',
-      email: 'user1@example.com',
+      email: createOfficeEmail('Budi Santoso'),
       phone: '081234567890',
-      department: 'IT',
-      position: 'Staff IT',
+      department: null,
+      position: 'Staff',
       qrToken: '11111111-1111-4111-8111-111111111111',
       isActive: true,
       createdAt: now,
@@ -161,12 +165,12 @@ function createInitialStore(): MockStore {
     {
       id: 'employee-2',
       userId: 'user-2',
-      employeeId: 'EMP-2026-0002',
+      employeeId: '0002',
       name: 'Siti Rahayu',
-      email: 'user2@example.com',
+      email: createOfficeEmail('Siti Rahayu'),
       phone: '081234567891',
-      department: 'HRD',
-      position: 'HR Officer',
+      department: null,
+      position: 'Staff',
       qrToken: '22222222-2222-4222-8222-222222222222',
       isActive: true,
       createdAt: now,
@@ -175,12 +179,12 @@ function createInitialStore(): MockStore {
     {
       id: 'employee-3',
       userId: 'user-3',
-      employeeId: 'EMP-2026-0003',
+      employeeId: '0003',
       name: 'Andi Wijaya',
-      email: 'user3@example.com',
+      email: createOfficeEmail('Andi Wijaya'),
       phone: '081234567892',
-      department: 'Finance',
-      position: 'Finance Staff',
+      department: null,
+      position: 'Staff',
       qrToken: '33333333-3333-4333-8333-333333333333',
       isActive: true,
       createdAt: now,
@@ -205,6 +209,9 @@ function createInitialStore(): MockStore {
         status: 'HADIR',
         scannedQrToken: '22222222-2222-4222-8222-222222222222',
         note: null,
+        latitude: -7.6146827,
+        longitude: 111.5239073,
+        distanceMeters: 0,
         createdAt: now,
         updatedAt: now,
       },
@@ -216,7 +223,10 @@ function createInitialStore(): MockStore {
         checkInTime: new Date(`${today}T08:24:00+07:00`),
         status: 'TERLAMBAT',
         scannedQrToken: '33333333-3333-4333-8333-333333333333',
-        note: 'Terlambat karena meeting luar',
+        note: 'Terlambat karena dinas luar',
+        latitude: -7.6146827,
+        longitude: 111.5239073,
+        distanceMeters: 0,
         createdAt: now,
         updatedAt: now,
       },
@@ -229,6 +239,9 @@ function createInitialStore(): MockStore {
         status: 'HADIR',
         scannedQrToken: '11111111-1111-4111-8111-111111111111',
         note: null,
+        latitude: -7.6146827,
+        longitude: 111.5239073,
+        distanceMeters: 0,
         createdAt: yesterday,
         updatedAt: yesterday,
       },
@@ -237,7 +250,7 @@ function createInitialStore(): MockStore {
       id: 'settings-1',
       workStartTime: '08:00',
       lateLimitTime: '08:15',
-      companyName: 'PT. Contoh Indonesia',
+      companyName: APP_ORGANIZATION,
       createdAt: now,
       updatedAt: now,
     },
@@ -278,18 +291,18 @@ export function getMockEmployee(id: string): MockEmployee | null {
 export function createMockEmployee(input: {
   employeeId?: string;
   name: string;
-  email: string;
-  password: string;
+  email?: string;
+  password?: string;
   phone?: string;
   department?: string;
   position?: string;
 }): MockEmployee {
   const store = getMockStore();
-  const email = normalizeEmail(input.email);
-  let employeeId = input.employeeId?.trim() || generateEmployeeId();
+  const email = normalizeEmail(input.email || createOfficeEmail(input.name));
+  let employeeId = normalizeEmployeeId(input.employeeId) || generateInternalEmployeeId();
 
   while (store.employees.some((employee) => employee.employeeId === employeeId)) {
-    employeeId = generateEmployeeId();
+    employeeId = generateInternalEmployeeId();
   }
 
   if (store.users.some((user) => user.email === email) || store.employees.some((employee) => employee.email === email)) {
@@ -317,7 +330,7 @@ export function createMockEmployee(input: {
     id: userId,
     name: employee.name,
     email,
-    password: input.password,
+    password: input.password || DEFAULT_USER_PASSWORD,
     role: 'USER',
     isActive: true,
     employee,
@@ -327,7 +340,9 @@ export function createMockEmployee(input: {
 }
 
 export function updateMockEmployee(id: string, input: {
+  employeeId?: string;
   name?: string;
+  email?: string;
   phone?: string;
   department?: string;
   position?: string;
@@ -339,7 +354,17 @@ export function updateMockEmployee(id: string, input: {
   if (!employee) return null;
 
   const name = input.name?.trim() || employee.name;
+  const employeeId = input.employeeId !== undefined ? normalizeEmployeeId(input.employeeId) || generateInternalEmployeeId() : employee.employeeId;
+  const email = input.email !== undefined ? normalizeEmail(input.email || employee.email) : employee.email;
+  if (employeeId !== employee.employeeId && store.employees.some((item) => item.id !== id && item.employeeId === employeeId)) {
+    throw new Error('NIP sudah terdaftar');
+  }
+  if (email !== employee.email && (store.users.some((item) => item.id !== employee.userId && item.email === email) || store.employees.some((item) => item.id !== id && item.email === email))) {
+    throw new Error('Email sudah terdaftar');
+  }
+  employee.employeeId = employeeId;
   employee.name = name;
+  employee.email = email;
   employee.phone = input.phone !== undefined ? emptyToNull(input.phone) : employee.phone;
   employee.department = input.department !== undefined ? emptyToNull(input.department) : employee.department;
   employee.position = input.position !== undefined ? emptyToNull(input.position) : employee.position;
@@ -350,6 +375,7 @@ export function updateMockEmployee(id: string, input: {
   const user = store.users.find((item) => item.id === employee.userId);
   if (user) {
     user.name = name;
+    user.email = email;
     user.isActive = employee.isActive;
     user.employee = employee;
   }
@@ -362,37 +388,45 @@ export function deactivateMockEmployee(id: string): boolean {
   return Boolean(employee);
 }
 
+export function deleteMockEmployee(id: string): boolean {
+  const store = getMockStore();
+  const employee = store.employees.find((item) => item.id === id);
+  if (!employee || employee.isActive) return false;
+
+  store.attendances = store.attendances.filter((attendance) => attendance.employeeId !== employee.id && attendance.userId !== employee.userId);
+  store.employees = store.employees.filter((item) => item.id !== employee.id);
+  store.users = store.users.filter((user) => user.id !== employee.userId);
+  return true;
+}
+
 export function upsertImportedMockEmployee(input: {
   employeeId?: string;
   name: string;
-  email: string;
+  email?: string;
   password?: string;
   phone?: string;
   department?: string;
   position?: string;
 }): 'created' | 'updated' {
   const store = getMockStore();
-  const email = normalizeEmail(input.email);
+  const email = normalizeEmail(input.email || createOfficeEmail(input.name));
   const employeeById = input.employeeId
     ? store.employees.find((employee) => employee.employeeId === input.employeeId)
     : undefined;
 
   if (employeeById) {
-    employeeById.name = input.name;
-    employeeById.email = email;
-    employeeById.phone = emptyToNull(input.phone);
-    employeeById.department = emptyToNull(input.department);
-    employeeById.position = emptyToNull(input.position);
-    employeeById.isActive = true;
-    employeeById.updatedAt = new Date();
-
+    updateMockEmployee(employeeById.id, {
+      employeeId: input.employeeId,
+      name: input.name,
+      email,
+      phone: input.phone,
+      department: input.department,
+      position: input.position,
+      isActive: true,
+    });
     const user = store.users.find((item) => item.id === employeeById.userId);
     if (user) {
-      user.name = input.name;
-      user.email = email;
-      user.isActive = true;
       user.password = input.password || user.password;
-      user.employee = employeeById;
     }
     return 'updated';
   }
@@ -401,7 +435,7 @@ export function upsertImportedMockEmployee(input: {
     employeeId: input.employeeId,
     name: input.name,
     email,
-    password: input.password || 'user123',
+    password: input.password || DEFAULT_USER_PASSWORD,
     phone: input.phone,
     department: input.department,
     position: input.position,
@@ -486,8 +520,13 @@ export function getMockTodayAttendance(employeeId: string): MockAttendance | nul
 export function createMockScanAttendance(session: {
   userId: string;
   employeeId: string;
-}, scannedToken: string): MockAttendance {
+}, scannedToken: string, location: { latitude?: number; longitude?: number } = {}): MockAttendance {
   const store = getMockStore();
+  const locationValidation = validateOfficeDistance(location.latitude, location.longitude);
+  if (!locationValidation.ok) {
+    throw new Error(locationValidation.message);
+  }
+
   const employee = store.employees.find((item) => item.id === session.employeeId);
   if (!employee || !employee.isActive) {
     throw new Error('Data pegawai tidak aktif atau belum terdaftar');
@@ -515,6 +554,9 @@ export function createMockScanAttendance(session: {
     status,
     scannedQrToken: scannedToken,
     note: null,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    distanceMeters: locationValidation.distanceMeters,
     createdAt: now,
     updatedAt: now,
   };
@@ -557,5 +599,46 @@ export function getMockDashboardSnapshot() {
     belumAbsenToday: Math.max(activeEmployees - hadirToday - terlambatToday, 0),
     recentAttendances: exportMockAttendances({}).slice(0, 10),
     settings: store.settings,
+  };
+}
+
+export function changeMockPassword(userId: string, oldPassword: string, newPassword: string) {
+  const store = getMockStore();
+  const user = store.users.find((item) => item.id === userId);
+  if (!user) return { ok: false, error: 'User tidak ditemukan' };
+  if (user.password !== oldPassword) return { ok: false, error: 'Password lama salah' };
+  user.password = newPassword;
+  return { ok: true };
+}
+
+function countWeekdaysUntilToday(date = new Date()) {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  let count = 0;
+  for (const cursor = new Date(start); cursor <= date; cursor.setDate(cursor.getDate() + 1)) {
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) count++;
+  }
+  return count;
+}
+
+export function getMockUserReport(employeeId: string) {
+  const store = getMockStore();
+  const now = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const employee = store.employees.find((item) => item.id === employeeId);
+  const attendances = exportMockAttendances({})
+    .filter((attendance) => attendance.employeeId === employeeId && attendance.date.startsWith(month));
+  const hadir = attendances.filter((attendance) => attendance.status === 'HADIR').length;
+  const terlambat = attendances.filter((attendance) => attendance.status === 'TERLAMBAT').length;
+  const workdays = countWeekdaysUntilToday(now);
+
+  return {
+    month,
+    hadir,
+    terlambat,
+    alpha: Math.max(workdays - hadir - terlambat, 0),
+    totalRecorded: attendances.length,
+    qrToken: employee?.qrToken || null,
+    attendances,
   };
 }

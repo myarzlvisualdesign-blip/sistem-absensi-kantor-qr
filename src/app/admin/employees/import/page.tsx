@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
+import { csvRowsToObjects, parseCsvRows } from '@/lib/csv';
 
 interface ImportResult {
   success: number;
@@ -14,7 +14,7 @@ interface ImportResult {
 
 export default function ImportEmployeesPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<any[]>([]);
+  const [preview, setPreview] = useState<Record<string, string>[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,20 +38,18 @@ export default function ImportEmployeesPage() {
     setFile(selectedFile);
     setResult(null);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = event.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        setPreview(jsonData.slice(0, 5));
-      } catch (error) {
-        toast.error('Gagal membaca file');
-      }
-    };
-    reader.readAsBinaryString(selectedFile);
+    setPreview([]);
+    if (selectedFile.name.toLowerCase().endsWith('.csv') || selectedFile.type === 'text/csv') {
+      selectedFile.text().then((text) => {
+        try {
+          setPreview(csvRowsToObjects(parseCsvRows(text)).slice(0, 5));
+        } catch {
+          toast.error('Gagal membaca preview CSV');
+        }
+      });
+    } else {
+      toast.success('File XLSX siap diimport');
+    }
   };
 
   const handleImport = async () => {
@@ -112,13 +110,13 @@ export default function ImportEmployeesPage() {
           File harus memiliki kolom berikut:
         </p>
         <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm overflow-x-auto">
-          <p>employee_id, name, email, password, department, position, phone</p>
+          <p>nip, name, email, password, position, phone</p>
           <p className="text-gray-500 mt-2">Contoh:</p>
-          <p>EMP-2024-0001, Budi Santoso, budi@contoh.com, password123, IT, Engineer, 081234567890</p>
-          <p>EMP-2024-0002, Siti Rahayu, siti@contoh.com, , HRD, Manager, 081234567891</p>
+          <p>123456789, Budi Santoso, budi.santoso@gmail.com, password123, Staff, 081234567890</p>
+          <p>, Pegawai Kontrak, pegawai.kontrak@gmail.com, , Staff, 081234567891</p>
         </div>
         <p className="text-sm text-gray-500 mt-4">
-          * password opsional, jika kosong sistem memakai password default user123
+          * NIP dan password opsional. Email wajib @gmail.com. NIP hanya boleh angka jika diisi.
         </p>
       </div>
 

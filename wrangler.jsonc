@@ -11,6 +11,19 @@
 		"directory": ".open-next/assets",
 		"binding": "ASSETS"
 	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "absensi-db",
+			"database_id": "28f9f916-2952-4633-b35a-b2edb8be9008"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "ATTENDANCE_R2",
+			"bucket_name": "sistem-absensi-kantor-qr-files"
+		}
+	],
 	"services": [
 		{
 			// Self-reference service binding, the service name must match the worker name

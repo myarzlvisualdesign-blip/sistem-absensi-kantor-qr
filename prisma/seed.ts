@@ -5,7 +5,7 @@ import crypto from 'crypto';
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin.lapas@gmail.com';
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
   await prisma.officeSetting.upsert({
@@ -13,13 +13,13 @@ async function main() {
     update: {
       workStartTime: '08:00',
       lateLimitTime: '08:15',
-      companyName: 'Sistem Absensi Kantor QR',
+      companyName: 'E-ABSENSI LASDAUN',
     },
     create: {
       id: 'default-office-setting',
       workStartTime: '08:00',
       lateLimitTime: '08:15',
-      companyName: 'Sistem Absensi Kantor QR',
+      companyName: 'E-ABSENSI LASDAUN',
     },
   });
 
@@ -41,28 +41,28 @@ async function main() {
 
   const employees = [
     {
-      employeeId: 'EMP-2026-0001',
-      email: 'user1@example.com',
+      employeeId: '0001',
+      email: 'budi.santoso@gmail.com',
       name: 'Budi Santoso',
       phone: '081234567890',
-      department: 'IT',
-      position: 'Software Engineer',
+      department: null,
+      position: 'Staff',
     },
     {
-      employeeId: 'EMP-2026-0002',
-      email: 'user2@example.com',
+      employeeId: '0002',
+      email: 'siti.rahayu@gmail.com',
       name: 'Siti Rahayu',
       phone: '081234567891',
-      department: 'HRD',
-      position: 'HR Manager',
+      department: null,
+      position: 'Staff',
     },
     {
-      employeeId: 'EMP-2026-0003',
-      email: 'user3@example.com',
-      name: 'Ahmad Fauzi',
+      employeeId: '0003',
+      email: 'andi.wijaya@gmail.com',
+      name: 'Andi Wijaya',
       phone: '081234567892',
-      department: 'Marketing',
-      position: 'Marketing Specialist',
+      department: null,
+      position: 'Staff',
     },
   ];
 
@@ -110,7 +110,7 @@ async function main() {
 
   console.log('Seed selesai');
   console.log(`Admin: ${adminEmail} / ${adminPassword}`);
-  console.log('User dummy: user1@example.com, user2@example.com, user3@example.com / user123');
+  console.log('User dummy: budi.santoso@gmail.com, siti.rahayu@gmail.com, andi.wijaya@gmail.com / user123');
 }
 
 main()

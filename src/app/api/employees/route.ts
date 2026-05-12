@@ -1,17 +1,20 @@
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { DEFAULT_USER_PASSWORD, createOfficeEmail, isAllowedEmailDomain } from '@/lib/app-config';
+import { createD1Employee, listD1Employees } from '@/lib/d1-store';
 import { createMockEmployee, listMockEmployees, shouldUseMockData } from '@/lib/mock-store';
-import { emptyToNull, generateEmployeeId, generateQRToken, normalizeEmail } from '@/lib/utils';
+import { emptyToNull, generateInternalEmployeeId, generateQRToken, isValidEmployeeId, normalizeEmail, normalizeEmployeeId } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
 async function createUniqueEmployeeId(proposed?: string): Promise<string> {
-  if (proposed) return proposed.trim();
+  const normalized = normalizeEmployeeId(proposed);
+  if (normalized) return normalized;
 
   const { default: prisma } = await import('@/lib/db');
   for (let i = 0; i < 8; i++) {
-    const value = generateEmployeeId();
+    const value = generateInternalEmployeeId();
     const exists = await prisma.employee.findUnique({ where: { employeeId: value } });
     if (!exists) return value;
   }
@@ -37,9 +40,9 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (shouldUseMockData()) {
-      return NextResponse.json(listMockEmployees());
-    }
+    const d1Employees = await listD1Employees();
+    if (d1Employees) return NextResponse.json(d1Employees);
+    if (shouldUseMockData()) return NextResponse.json(listMockEmployees());
 
     const { default: prisma } = await import('@/lib/db');
     const employees = await prisma.employee.findMany({
@@ -81,21 +84,47 @@ export async function POST(request: Request) {
     body = (await request.json()) as typeof body;
 
     const name = body.name?.trim();
-    const email = body.email ? normalizeEmail(body.email) : '';
+    const email = normalizeEmail(body.email || (name ? createOfficeEmail(name) : ''));
+    const employeeId = normalizeEmployeeId(body.employeeId);
     const password = body.password?.trim();
 
-    if (!name || !email || !password) {
-      return NextResponse.json({ error: 'Nama, email, dan password diperlukan' }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: 'Nama diperlukan' }, { status: 400 });
     }
 
-    if (password.length < 6) {
+    if (password && password.length < 6) {
       return NextResponse.json({ error: 'Password minimal 6 karakter' }, { status: 400 });
+    }
+
+    if (!isAllowedEmailDomain(email)) {
+      return NextResponse.json({ error: 'Email wajib memakai domain @gmail.com' }, { status: 400 });
+    }
+
+    if (!isValidEmployeeId(employeeId)) {
+      return NextResponse.json({ error: 'NIP hanya boleh berisi angka dan boleh dikosongkan' }, { status: 400 });
+    }
+
+    try {
+      const d1Employee = await createD1Employee({
+        employeeId,
+        name,
+        email,
+        password,
+        phone: body.phone,
+        department: body.department,
+        position: body.position,
+      });
+      if (d1Employee) return NextResponse.json({ success: true, employee: d1Employee }, { status: 201 });
+    } catch (d1Error) {
+      const message = d1Error instanceof Error ? d1Error.message : 'Server error';
+      const status = message.includes('terdaftar') ? 409 : 400;
+      return NextResponse.json({ error: message }, { status });
     }
 
     if (shouldUseMockData()) {
       try {
         const employee = createMockEmployee({
-          employeeId: body.employeeId,
+          employeeId,
           name,
           email,
           password,
@@ -120,13 +149,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email sudah terdaftar' }, { status: 409 });
     }
 
-    const employeeId = await createUniqueEmployeeId(body.employeeId);
-    const existingEmployeeId = await prisma.employee.findUnique({ where: { employeeId } });
+    const finalEmployeeId = await createUniqueEmployeeId(employeeId);
+    const existingEmployeeId = await prisma.employee.findUnique({ where: { employeeId: finalEmployeeId } });
     if (existingEmployeeId) {
-      return NextResponse.json({ error: 'Employee ID sudah terdaftar' }, { status: 409 });
+      return NextResponse.json({ error: 'NIP sudah terdaftar' }, { status: 409 });
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(password || DEFAULT_USER_PASSWORD, 12);
     const qrToken = await createUniqueQrToken();
 
     const result = await prisma.$transaction(async (tx) => {
@@ -143,7 +172,7 @@ export async function POST(request: Request) {
       const employee = await tx.employee.create({
         data: {
           userId: user.id,
-          employeeId,
+          employeeId: finalEmployeeId,
           name,
           email,
           phone: emptyToNull(body.phone),
@@ -166,7 +195,7 @@ export async function POST(request: Request) {
         newValue: {
           name,
           email,
-          employeeId,
+          employeeId: finalEmployeeId,
         },
       },
     });
@@ -177,7 +206,7 @@ export async function POST(request: Request) {
     if (body.name && body.email && body.password && body.password.trim().length >= 6) {
       try {
         const employee = createMockEmployee({
-          employeeId: body.employeeId,
+          employeeId: normalizeEmployeeId(body.employeeId),
           name: body.name,
           email: body.email,
           password: body.password,

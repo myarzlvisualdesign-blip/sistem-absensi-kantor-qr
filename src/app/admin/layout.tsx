@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { APP_LOGO_PATH, APP_NAME, APP_ORGANIZATION, APP_SECONDARY_LOGO_PATH } from '@/lib/app-config';
 
 interface User {
   id: string;
@@ -18,6 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const hasSecondaryLogo = APP_SECONDARY_LOGO_PATH !== APP_LOGO_PATH;
 
   useEffect(() => {
     const fetchSession = async () => {
@@ -75,8 +77,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-gray-100">
       <header className="sticky top-0 z-40 flex items-center justify-between bg-gray-900 px-4 py-3 text-white lg:hidden">
         <div>
-          <p className="font-semibold">Admin Panel</p>
-          <p className="text-xs text-gray-400">Sistem Absensi QR</p>
+          <p className="font-semibold">Admin {APP_NAME}</p>
+          <p className="text-xs text-gray-400">{APP_ORGANIZATION}</p>
         </div>
         <button
           type="button"
@@ -101,8 +103,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       <aside className={`fixed left-0 top-0 z-50 h-full w-64 bg-gray-900 text-white transition-transform lg:translate-x-0 ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6">
-          <h1 className="text-xl font-bold">Admin Panel</h1>
-          <p className="text-sm text-gray-400 mt-1">Sistem Absensi QR</p>
+          <div className="flex items-center gap-3">
+            <div className="flex -space-x-2">
+              <div className="h-12 w-12 rounded-full bg-white p-1 ring-2 ring-gray-900">
+                <img src={APP_LOGO_PATH} alt="Logo Lapas" className="h-full w-full object-contain" />
+              </div>
+              {hasSecondaryLogo && (
+                <div className="h-12 w-12 rounded-full bg-white p-1 ring-2 ring-gray-900">
+                  <img src={APP_SECONDARY_LOGO_PATH} alt="Logo Pemasyarakatan" className="h-full w-full object-contain" />
+                </div>
+              )}
+            </div>
+            <div>
+              <h1 className="text-lg font-bold leading-tight">{APP_NAME}</h1>
+              <p className="text-xs text-gray-400 mt-1">Lapas Pemuda IIA Madiun</p>
+            </div>
+          </div>
         </div>
 
         <nav className="mt-6">

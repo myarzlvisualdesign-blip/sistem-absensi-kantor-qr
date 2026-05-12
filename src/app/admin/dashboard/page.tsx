@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
+import { getD1DashboardSnapshot } from '@/lib/d1-store';
 import { getMockDashboardSnapshot, shouldUseMockData } from '@/lib/mock-store';
-import { getTodayString } from '@/lib/utils';
+import { formatEmployeeId, getTodayString } from '@/lib/utils';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,14 @@ export default async function AdminDashboardPage() {
 
   let dashboardData;
 
-  if (shouldUseMockData()) {
+  const d1Snapshot = await getD1DashboardSnapshot().catch((error) => {
+    console.error('D1 dashboard fallback:', error);
+    return null;
+  });
+
+  if (d1Snapshot) {
+    dashboardData = d1Snapshot;
+  } else if (shouldUseMockData()) {
     dashboardData = getMockDashboardSnapshot();
   } else try {
     const { default: prisma } = await import('@/lib/db');
@@ -174,7 +182,7 @@ export default async function AdminDashboardPage() {
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 font-medium">Nama</th>
-                  <th className="pb-3 font-medium">ID Pegawai</th>
+                  <th className="pb-3 font-medium">NIP Pegawai</th>
                   <th className="pb-3 font-medium">Jam Masuk</th>
                   <th className="pb-3 font-medium">Status</th>
                 </tr>
@@ -183,7 +191,7 @@ export default async function AdminDashboardPage() {
                 {recentAttendances.map((attendance: { id: string; employee: { name: string; employeeId: string }; checkInTime: Date; status: string }) => (
                   <tr key={attendance.id} className="border-b last:border-0">
                     <td className="py-3">{attendance.employee.name}</td>
-                    <td className="py-3 text-gray-500">{attendance.employee.employeeId}</td>
+                    <td className="py-3 text-gray-500">{formatEmployeeId(attendance.employee.employeeId)}</td>
                     <td className="py-3">
                       {new Date(attendance.checkInTime).toLocaleTimeString('id-ID', {
                         hour: '2-digit',
